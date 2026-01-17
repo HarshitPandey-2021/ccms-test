@@ -11,27 +11,11 @@ const { Readable } = require("stream");
 
 // ✅ NEW: OTP Dependencies
 const otpGenerator = require("otp-generator");
-const nodemailer = require('nodemailer');
+const sgMail = require('@sendgrid/mail');
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
+console.log('✅ SendGrid initialized');
 const app = express();
-
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.GMAIL_USER,
-    pass: process.env.GMAIL_APP_PASSWORD,
-  },
-});
-
-// Verify connection
-transporter.verify((error, success) => {
-  if (error) {
-    console.error('❌ Gmail connection error:', error);
-  } else {
-    console.log('✅ Gmail transporter ready');
-  }
-});
-
 // ---------- CORS & BODY PARSING ----------
 app.use(
   cors({
@@ -235,7 +219,7 @@ function getWelcomeEmailTemplate(user) {
                 <tr>
                   <td style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);border-radius:30px;padding:15px 40px;">
                     <a href="https://user-dash-test.vercel.app/login" style="color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;display:inline-block;">
-                      Go to Login →
+                      Go to Login  →
                     </a>
                   </td>
                 </tr>
@@ -264,18 +248,21 @@ async function sendOTPEmail(email, otp, name) {
   try {
     console.log(`📤 Sending OTP to: ${email}`);
     
-    const mailOptions = {
-      from: `"CCMS" <${process.env.GMAIL_USER}>`,
+    const msg = {
       to: email,
+      from: process.env.SENDGRID_FROM_EMAIL,
       subject: '🔐 Verify Your Email - CCMS Registration',
       html: getOTPEmailTemplate(name, otp),
     };
 
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`✅ OTP email sent! Message ID: ${info.messageId}`);
+    await sgMail.send(msg);
+    console.log(`✅ OTP email sent to ${email} via SendGrid`);
     return { success: true };
   } catch (error) {
-    console.error('❌ Email error:', error.message);
+    console.error('❌ SendGrid error:', error.message);
+    if (error.response) {
+      console.error('Error body:', error.response.body);
+    }
     throw error;
   }
 }
@@ -283,15 +270,15 @@ async function sendOTPEmail(email, otp, name) {
 // ✅ NEW: Send Welcome Email Function
 async function sendWelcomeEmail(user) {
   try {
-    const mailOptions = {
-      from: `"CCMS" <${process.env.GMAIL_USER}>`,
+    const msg = {
       to: user.email,
+      from: process.env.SENDGRID_FROM_EMAIL,
       subject: '🎉 Welcome to CCMS - Registration Successful!',
       html: getWelcomeEmailTemplate(user),
     };
 
-    await transporter.sendMail(mailOptions);
-    console.log(`✅ Welcome email sent to ${user.email}`);
+    await sgMail.send(msg);
+    console.log(`✅ Welcome email sent to ${user.email} via SendGrid`);
   } catch (error) {
     console.error('❌ Welcome email error:', error);
   }
