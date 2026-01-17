@@ -9,29 +9,32 @@ const multer = require("multer");
 const cloudinary = require("cloudinary").v2;
 const { Readable } = require("stream");
 
+// ✅ NEW: OTP Dependencies
+const otpGenerator = require("otp-generator");
+const { Resend } = require("resend");
+
 const app = express();
+
+// ✅ NEW: Initialize Resend
+const resend = new Resend(process.env.RESEND_API_KEY);
+const FROM_EMAIL = process.env.FROM_EMAIL || "CCMS <onboarding@resend.dev>";
 
 // ---------- CORS & BODY PARSING ----------
 app.use(
   cors({
     origin: [
-      "https://ccms-home.vercel.app",           // Landing
-      "https://ccms-admin-rho.vercel.app",      // Admin
-      "https://ccms-student.vercel.app",        // Student
-
-        // Testing (NEW - add these)
+      "https://ccms-home.vercel.app",
+      "https://ccms-admin-rho.vercel.app",
+      "https://ccms-student.vercel.app",
       "https://ccms-home-test.vercel.app",
       "https://ccms-admin-test.vercel.app",
       "https://ccms-student-test.vercel.app",
-
-            // Testing - ACTUAL URLs (ADD THESE!)
-      "https://landing-test-liard-one.vercel.app",    // ✅ ADD THIS!
-      "https://admin-test-nine.vercel.app",           // ✅ ADD THIS!
-      "https://user-dash-test.vercel.app",            // ✅ ADD THIS!
-
-      "http://localhost:5173",                  // Local admin
-      "http://localhost:5174",                  // Local landing
-      "http://localhost:3001",                  // Local user
+      "https://landing-test-liard-one.vercel.app",
+      "https://admin-test-nine.vercel.app",
+      "https://user-dash-test.vercel.app",
+      "http://localhost:5173",
+      "http://localhost:5174",
+      "http://localhost:3001",
     ],
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
@@ -46,7 +49,8 @@ const PORT = process.env.PORT || 4000;
 const uri = process.env.MONGODB_URI;
 const dbName = process.env.DB_NAME;
 
-let db, Users, Complaints, AdminLogs, Departments;
+// ✅ UPDATED: Added OTPs collection
+let db, Users, Complaints, AdminLogs, Departments, OTPs;
 
 // ---------- CLOUDINARY ----------
 cloudinary.config({
@@ -109,6 +113,171 @@ function normalizeRole(role) {
   return "student";
 }
 
+// ✅ NEW: Email Template Functions
+function getOTPEmailTemplate(name, otp) {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin:0;padding:0;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background-color:#f0f2f5;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:20px;box-shadow:0 20px 60px rgba(0,0,0,0.3);overflow:hidden;">
+          <!-- Header -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);padding:40px 30px;text-align:center;">
+              <div style="font-size:50px;margin-bottom:15px;">🔐</div>
+              <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:700;">Verify Your Email</h1>
+              <p style="margin:10px 0 0 0;color:rgba(255,255,255,0.9);font-size:16px;">Complete your CCMS registration</p>
+            </td>
+          </tr>
+          
+          <!-- Body -->
+          <tr>
+            <td style="padding:40px 30px;">
+              <h2 style="color:#1f2937;font-size:22px;margin:0 0 15px 0;">Hello ${name || "there"}! 👋</h2>
+              <p style="color:#4b5563;font-size:16px;line-height:1.6;margin:0 0 25px 0;">
+                Thank you for registering with <strong>Campus Complaint Management System</strong>. 
+                Use the verification code below to complete your registration.
+              </p>
+              
+              <!-- OTP Box -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin:30px 0;">
+                <tr>
+                  <td style="background:linear-gradient(135deg,#f3f4f6 0%,#e5e7eb 100%);border-radius:16px;padding:30px;text-align:center;border:2px dashed #9ca3af;">
+                    <div style="color:#6b7280;font-size:14px;margin-bottom:15px;text-transform:uppercase;letter-spacing:2px;font-weight:600;">Your Verification Code</div>
+                    <div style="font-size:42px;font-weight:800;color:#667eea;letter-spacing:8px;font-family:'Courier New',monospace;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">${otp}</div>
+                    <div style="margin-top:15px;font-size:14px;color:#dc2626;font-weight:600;">⏰ Valid for 10 minutes only</div>
+                  </td>
+                </tr>
+              </table>
+              
+              <!-- Warning -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin:25px 0;">
+                <tr>
+                  <td style="background:#fef3c7;border-left:4px solid #f59e0b;padding:15px 20px;border-radius:0 8px 8px 0;">
+                    <p style="margin:0;font-size:14px;color:#92400e;">
+                      <strong>⚠️ Security Notice:</strong><br>
+                      Never share this code with anyone. CCMS staff will never ask for your OTP.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Footer -->
+          <tr>
+            <td style="background:#f9fafb;padding:25px 30px;text-align:center;border-top:1px solid #e5e7eb;">
+              <p style="margin:0 0 10px 0;color:#6b7280;font-size:13px;">
+                If you didn't request this code, please ignore this email.
+              </p>
+              <p style="margin:0;color:#9ca3af;font-size:12px;">
+                © 2026 Campus Complaint Management System
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+function getWelcomeEmailTemplate(user) {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin:0;padding:0;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background-color:#f0f2f5;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:20px;box-shadow:0 20px 60px rgba(0,0,0,0.3);overflow:hidden;">
+          <!-- Header -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#10b981 0%,#059669 100%);padding:50px 30px;text-align:center;">
+              <div style="font-size:70px;margin-bottom:20px;">🎉</div>
+              <h1 style="margin:0;color:#ffffff;font-size:32px;font-weight:700;">Welcome to CCMS!</h1>
+              <p style="margin:15px 0 0 0;color:rgba(255,255,255,0.9);font-size:16px;">Your account has been created successfully</p>
+            </td>
+          </tr>
+          
+          <!-- Body -->
+          <tr>
+            <td style="padding:40px 30px;text-align:center;">
+              <h2 style="color:#1f2937;font-size:24px;margin:0 0 20px 0;">Hello, ${user.name}! 👋</h2>
+              <p style="color:#4b5563;font-size:16px;line-height:1.6;margin:0 0 30px 0;">
+                Your CCMS account is now active. You can start submitting and tracking complaints right away!
+              </p>
+              
+              <!-- CTA Button -->
+              <table cellpadding="0" cellspacing="0" style="margin:0 auto;">
+                <tr>
+                  <td style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);border-radius:30px;padding:15px 40px;">
+                    <a href="https://user-dash-test.vercel.app/dashboard" style="color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;display:inline-block;">
+                      Go to Dashboard →
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Footer -->
+          <tr>
+            <td style="background:#f9fafb;padding:25px 30px;text-align:center;border-top:1px solid #e5e7eb;">
+              <p style="margin:0;color:#9ca3af;font-size:12px;">
+                © 2026 Campus Complaint Management System
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+// ✅ NEW: Send OTP Email Function
+async function sendOTPEmail(email, otp, name) {
+  try {
+    const result = await resend.emails.send({
+      from: FROM_EMAIL,
+      to: email,
+      subject: "🔐 Verify Your Email - CCMS Registration",
+      html: getOTPEmailTemplate(name, otp),
+    });
+    console.log("✅ OTP email sent to:", email);
+    return { success: true, data: result };
+  } catch (error) {
+    console.error("❌ Failed to send OTP email:", error);
+    throw error;
+  }
+}
+
+// ✅ NEW: Send Welcome Email Function
+async function sendWelcomeEmail(user) {
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to: user.email,
+      subject: "🎉 Welcome to CCMS - Registration Successful!",
+      html: getWelcomeEmailTemplate(user),
+    });
+    console.log("✅ Welcome email sent to:", user.email);
+  } catch (error) {
+    console.error("❌ Failed to send welcome email:", error);
+  }
+}
+
 // ---------- AUTH MIDDLEWARE ----------
 function auth(req, res, next) {
   const token = req.headers["authorization"]?.replace("Bearer ", "");
@@ -148,6 +317,7 @@ async function start() {
   Complaints = db.collection("Complaints");
   AdminLogs = db.collection("AdminLogs");
   Departments = db.collection("Departments");
+  OTPs = db.collection("OTPs"); // ✅ NEW: OTP Collection
 
   await Users.createIndex({ email: 1 }, { unique: true });
   await Departments.createIndex({ name: 1 }, { unique: true });
@@ -156,6 +326,10 @@ async function start() {
   await Complaints.createIndex({ assignedTo: 1 });
   await Complaints.createIndex({ submittedAt: -1 });
   await Complaints.createIndex({ subject: "text", description: "text" });
+  
+  // ✅ NEW: OTP Indexes
+  await OTPs.createIndex({ email: 1 });
+  await OTPs.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }); // Auto-delete expired OTPs
 
   console.log("✅ MongoDB connected. DB:", dbName);
   app.listen(PORT, () => console.log(`🚀 Server: http://localhost:${PORT}`));
@@ -175,7 +349,7 @@ app.get("/health", (req, res) => {
   });
 });
 
-// Keep-alive (NEW)
+// Keep-alive (Production)
 if (process.env.NODE_ENV === "production") {
   const keepAlive = () => {
     setInterval(() => {
@@ -185,13 +359,13 @@ if (process.env.NODE_ENV === "production") {
           .then(() => console.log("✅ Keep-alive ping"))
           .catch((err) => console.log("❌ Ping failed:", err.message));
       }
-    }, 14 * 60 * 1000); // 14 min
+    }, 14 * 60 * 1000);
   };
 
   setTimeout(() => {
     keepAlive();
     console.log("🔄 Keep-alive started");
-  }, 60 * 1000); // 1 min
+  }, 60 * 1000);
 }
 
 app.get("/api/test-cloudinary", async (req, res) => {
@@ -234,7 +408,268 @@ app.get("/api/files/pdf/:publicId", async (req, res) => {
   }
 });
 
-// ---------- AUTH ROUTES ----------
+// ============================================
+// ✅ NEW: OTP REGISTRATION ROUTES
+// ============================================
+
+// Step 1: Request OTP for Registration
+app.post("/api/auth/register/request-otp", async (req, res) => {
+  try {
+    const { email, name } = req.body;
+
+    // Validation
+    if (!email || !name) {
+      return res.status(400).json({
+        success: false,
+        message: "Email and name are required",
+      });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Check if user already exists
+    const existingUser = await Users.findOne({ email: normalizedEmail });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: "Email already registered. Please login instead.",
+      });
+    }
+
+    // Generate 6-digit OTP
+    const otp = otpGenerator.generate(6, {
+      digits: true,
+      upperCaseAlphabets: false,
+      lowerCaseAlphabets: false,
+      specialChars: false,
+    });
+
+    console.log(`📧 Generated OTP for ${normalizedEmail}: ${otp}`); // For testing
+
+    // Delete any existing OTPs for this email
+    await OTPs.deleteMany({ email: normalizedEmail });
+
+    // Save new OTP (expires in 10 minutes)
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    await OTPs.insertOne({
+      email: normalizedEmail,
+      otp: otp,
+      name: name.trim(),
+      verified: false,
+      createdAt: new Date(),
+      expiresAt: expiresAt,
+    });
+
+    // Send OTP email
+    await sendOTPEmail(normalizedEmail, otp, name);
+
+    res.status(200).json({
+      success: true,
+      message: `Verification code sent to ${normalizedEmail}`,
+      expiresIn: 600, // 10 minutes in seconds
+    });
+  } catch (error) {
+    console.error("❌ Request OTP error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to send verification code. Please try again.",
+      error: error.message,
+    });
+  }
+});
+
+// Step 2: Verify OTP and Complete Registration
+app.post("/api/auth/register/verify-otp", async (req, res) => {
+  try {
+    const { email, otp, name, password, roll, rollNo, phone } = req.body;
+
+    // Validation
+    if (!email || !otp || !name || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Email, OTP, name, and password are required",
+      });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Find valid OTP
+    const otpDoc = await OTPs.findOne({
+      email: normalizedEmail,
+      otp: otp.trim(),
+      verified: false,
+      expiresAt: { $gt: new Date() },
+    });
+
+    if (!otpDoc) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or expired verification code. Please request a new one.",
+      });
+    }
+
+    // Check if user already exists (double check)
+    const existingUser = await Users.findOne({ email: normalizedEmail });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: "Email already registered",
+      });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Determine role and roll number
+    const userRoll = roll || rollNo || null;
+    const userRole = userRoll ? "student" : "student"; // Default to student
+
+    // Create user
+    const now = new Date();
+    const newUser = {
+      name: name.trim(),
+      email: normalizedEmail,
+      password: hashedPassword,
+      phone: phone?.trim() || null,
+      roll: userRoll,
+      role: userRole,
+      emailVerified: true,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const result = await Users.insertOne(newUser);
+    const userId = result.insertedId.toString();
+
+    console.log("✅ User registered with OTP:", normalizedEmail);
+
+    // Mark OTP as verified
+    await OTPs.updateOne(
+      { _id: otpDoc._id },
+      { $set: { verified: true } }
+    );
+
+    // Send welcome email (non-blocking)
+    sendWelcomeEmail({ ...newUser, _id: result.insertedId }).catch((err) =>
+      console.error("Welcome email failed:", err)
+    );
+
+    // Generate tokens
+    const payload = { userId, email: normalizedEmail, role: userRole };
+
+    const accessToken = jwt.sign(payload, process.env.JWT_SECRET, {
+      expiresIn: process.env.JWT_EXPIRES_IN || "24h",
+    });
+
+    const refreshToken = jwt.sign(
+      { ...payload, type: "refresh" },
+      process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
+      { expiresIn: "30d" }
+    );
+
+    res.status(201).json({
+      success: true,
+      message: "Registration successful! Welcome to CCMS.",
+      token: accessToken,
+      refreshToken: refreshToken,
+      user: {
+        id: userId,
+        _id: userId,
+        name: newUser.name,
+        email: newUser.email,
+        phone: newUser.phone,
+        roll: newUser.roll,
+        role: newUser.role,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Verify OTP error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Registration failed. Please try again.",
+      error: error.message,
+    });
+  }
+});
+
+// Resend OTP
+app.post("/api/auth/register/resend-otp", async (req, res) => {
+  try {
+    const { email, name } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required",
+      });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Check if user already exists
+    const existingUser = await Users.findOne({ email: normalizedEmail });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: "Email already registered",
+      });
+    }
+
+    // Check rate limiting (prevent spam)
+    const recentOTP = await OTPs.findOne({
+      email: normalizedEmail,
+      createdAt: { $gt: new Date(Date.now() - 60 * 1000) }, // Last 1 minute
+    });
+
+    if (recentOTP) {
+      return res.status(429).json({
+        success: false,
+        message: "Please wait 1 minute before requesting another code",
+      });
+    }
+
+    // Generate new OTP
+    const otp = otpGenerator.generate(6, {
+      digits: true,
+      upperCaseAlphabets: false,
+      lowerCaseAlphabets: false,
+      specialChars: false,
+    });
+
+    console.log(`📧 Resent OTP for ${normalizedEmail}: ${otp}`);
+
+    // Delete old OTPs and create new one
+    await OTPs.deleteMany({ email: normalizedEmail });
+    await OTPs.insertOne({
+      email: normalizedEmail,
+      otp: otp,
+      name: name?.trim() || "User",
+      verified: false,
+      createdAt: new Date(),
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+    });
+
+    // Send OTP email
+    await sendOTPEmail(normalizedEmail, otp, name || "User");
+
+    res.status(200).json({
+      success: true,
+      message: "New verification code sent",
+      expiresIn: 600,
+    });
+  } catch (error) {
+    console.error("❌ Resend OTP error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to resend code",
+    });
+  }
+});
+
+// ============================================
+// EXISTING AUTH ROUTES (UNCHANGED)
+// ============================================
+
 app.post("/api/auth/register", async (req, res) => {
   try {
     const { name, email, password, role, roll } = req.body;
@@ -466,9 +901,7 @@ app.post("/api/auth/refresh", async (req, res) => {
     res.json({ token: newAccessToken });
   } catch (error) {
     console.error("Refresh token error:", error);
-    res
-      .status(401)
-      .json({ message: "Invalid or expired refresh token" });
+    res.status(401).json({ message: "Invalid or expired refresh token" });
   }
 });
 
@@ -495,9 +928,7 @@ app.post("/api/auth/change-password", auth, async (req, res) => {
 
     const isMatch = await bcrypt.compare(currentPassword, user.password);
     if (!isMatch) {
-      return res
-        .status(401)
-        .json({ message: "Current password incorrect" });
+      return res.status(401).json({ message: "Current password incorrect" });
     }
 
     const hash = await bcrypt.hash(newPassword, 10);
@@ -654,10 +1085,7 @@ app.post(
       }
 
       const complaintCount = await Complaints.countDocuments();
-      const complaintId = `CMP${String(complaintCount + 1).padStart(
-        5,
-        "0"
-      )}`;
+      const complaintId = `CMP${String(complaintCount + 1).padStart(5, "0")}`;
 
       const now = new Date();
       const complaint = {
@@ -904,8 +1332,7 @@ app.put(
       const transformed = {
         ...updatedComplaint,
         title: updatedComplaint.title || updatedComplaint.subject,
-        createdAt:
-          updatedComplaint.createdAt || updatedComplaint.submittedAt,
+        createdAt: updatedComplaint.createdAt || updatedComplaint.submittedAt,
       };
 
       res.json({
@@ -943,7 +1370,6 @@ app.get("/api/complaints", auth, async (req, res) => {
   }
 });
 
-// Get all complaints for admin (alternative endpoint)
 app.get(
   "/api/complaints/admin/all",
   auth,
@@ -1094,9 +1520,7 @@ app.get(
       res.json(transformed);
     } catch (error) {
       console.error("Unread complaints error:", error);
-      res
-        .status(500)
-        .json({ message: "Failed to fetch unread complaints" });
+      res.status(500).json({ message: "Failed to fetch unread complaints" });
     }
   }
 );
@@ -1110,9 +1534,7 @@ app.patch(
       const { id } = req.params;
 
       if (!ObjectId.isValid(id)) {
-        return res
-          .status(400)
-          .json({ message: "Invalid complaint ID" });
+        return res.status(400).json({ message: "Invalid complaint ID" });
       }
 
       const result = await Complaints.updateOne(
@@ -1144,14 +1566,13 @@ app.patch(
   }
 );
 
-// ---------- ADMIN ANALYTICS (UPDATED) ----------
+// ---------- ADMIN ANALYTICS ----------
 app.get(
   "/api/complaints/admin/analytics",
   auth,
   requireRole("admin"),
   async (req, res) => {
     try {
-      // --- Basic counts ---
       const total = await Complaints.countDocuments();
       const pending = await Complaints.countDocuments({ status: "Pending" });
       const inProgress = await Complaints.countDocuments({
@@ -1160,7 +1581,6 @@ app.get(
       const resolved = await Complaints.countDocuments({ status: "Resolved" });
       const rejected = await Complaints.countDocuments({ status: "Rejected" });
 
-      // --- By Category ---
       const categoryStats = await Complaints.aggregate([
         {
           $group: {
@@ -1170,7 +1590,6 @@ app.get(
         },
       ]).toArray();
 
-      // --- By Priority ---
       const priorityStats = await Complaints.aggregate([
         {
           $group: {
@@ -1180,14 +1599,12 @@ app.get(
         },
       ]).toArray();
 
-      // Convert priorityStats to object: { High: 10, Medium: 5, ... }
       const byPriority = {};
       priorityStats.forEach((p) => {
         const key = p._id || "UNKNOWN";
         byPriority[key] = p.count || 0;
       });
 
-      // --- Average resolution time (in hours) ---
       const resolutionAgg = await Complaints.aggregate([
         {
           $match: {
@@ -1201,7 +1618,7 @@ app.get(
             diffHours: {
               $divide: [
                 { $subtract: ["$resolvedAt", "$submittedAt"] },
-                1000 * 60 * 60, // ms -> hours
+                1000 * 60 * 60,
               ],
             },
           },
@@ -1217,7 +1634,6 @@ app.get(
       const avgResolutionTime =
         resolutionAgg.length > 0 ? resolutionAgg[0].avgHours : 0;
 
-      // --- Response structure compatible with Analytics.jsx ---
       res.json({
         stats: {
           total,
@@ -1226,12 +1642,12 @@ app.get(
           resolved,
           rejected,
         },
-        categories: categoryStats, // array
-        byCategory: null, // optional
-        categoryStats, // same as categories
-        byPriority, // object { High: 10, Medium: 5, ... }
-        priorities: priorityStats, // array [{ _id: 'High', count: 10 }, ...]
-        avgResolutionTime, // hours (float)
+        categories: categoryStats,
+        byCategory: null,
+        categoryStats,
+        byPriority,
+        priorities: priorityStats,
+        avgResolutionTime,
       });
     } catch (e) {
       console.error("Analytics error:", e);
@@ -1240,24 +1656,19 @@ app.get(
   }
 );
 
-
-
 // ==================== PUBLIC ROUTES (NO AUTH) ====================
 
-// Public landing page stats (NO authentication required)
 app.get("/api/complaints/public/stats", async (req, res) => {
   try {
-    // Total resolved complaints
     const totalResolved = await Complaints.countDocuments({ status: "Resolved" });
 
-    // Calculate average response time (in hours)
-    const resolvedComplaints = await Complaints.find({ 
+    const resolvedComplaints = await Complaints.find({
       status: "Resolved",
       submittedAt: { $exists: true },
-      resolvedAt: { $exists: true }
+      resolvedAt: { $exists: true },
     }).toArray();
 
-    let avgResponseHours = 24; // Default fallback
+    let avgResponseHours = 24;
 
     if (resolvedComplaints.length > 0) {
       const totalTime = resolvedComplaints.reduce((sum, c) => {
@@ -1268,17 +1679,23 @@ app.get("/api/complaints/public/stats", async (req, res) => {
         return sum;
       }, 0);
 
-      avgResponseHours = Math.round(totalTime / resolvedComplaints.length / 1000 / 60 / 60);
+      avgResponseHours = Math.round(
+        totalTime / resolvedComplaints.length / 1000 / 60 / 60
+      );
       if (avgResponseHours < 1) avgResponseHours = 1;
     }
 
-    // Calculate satisfaction rate
     const totalComplaints = await Complaints.countDocuments();
-    const satisfactionRate = totalComplaints > 0 
-      ? Math.round((totalResolved / totalComplaints) * 100) 
-      : 95;
+    const satisfactionRate =
+      totalComplaints > 0
+        ? Math.round((totalResolved / totalComplaints) * 100)
+        : 95;
 
-    console.log("✅ Landing stats:", { totalResolved, avgResponseHours, satisfactionRate });
+    console.log("✅ Landing stats:", {
+      totalResolved,
+      avgResponseHours,
+      satisfactionRate,
+    });
 
     res.status(200).json({
       totalResolved: totalResolved || 50,
@@ -1302,14 +1719,10 @@ app.use((req, res) => {
 app.use((err, req, res, next) => {
   if (err instanceof multer.MulterError) {
     if (err.code === "LIMIT_FILE_SIZE") {
-      return res
-        .status(400)
-        .json({ message: "File too large. Max 10MB." });
+      return res.status(400).json({ message: "File too large. Max 10MB." });
     }
     if (err.code === "LIMIT_FILE_COUNT") {
-      return res
-        .status(400)
-        .json({ message: "Too many files. Max 6 files." });
+      return res.status(400).json({ message: "Too many files. Max 6 files." });
     }
     return res.status(400).json({ message: err.message });
   }
