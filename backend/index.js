@@ -11,13 +11,26 @@ const { Readable } = require("stream");
 
 // ✅ NEW: OTP Dependencies
 const otpGenerator = require("otp-generator");
-const { Resend } = require("resend");
+const nodemailer = require('nodemailer');
 
 const app = express();
 
-// ✅ NEW: Initialize Resend
-const resend = new Resend(process.env.RESEND_API_KEY);
-const FROM_EMAIL = process.env.FROM_EMAIL || "CCMS <onboarding@resend.dev>";
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.GMAIL_USER,
+    pass: process.env.GMAIL_APP_PASSWORD,
+  },
+});
+
+// Verify connection
+transporter.verify((error, success) => {
+  if (error) {
+    console.error('❌ Gmail connection error:', error);
+  } else {
+    console.log('✅ Gmail transporter ready');
+  }
+});
 
 // ---------- CORS & BODY PARSING ----------
 app.use(
@@ -221,8 +234,8 @@ function getWelcomeEmailTemplate(user) {
               <table cellpadding="0" cellspacing="0" style="margin:0 auto;">
                 <tr>
                   <td style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);border-radius:30px;padding:15px 40px;">
-                    <a href="https://user-dash-test.vercel.app/dashboard" style="color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;display:inline-block;">
-                      Go to Dashboard →
+                    <a href="https://user-dash-test.vercel.app/login" style="color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;display:inline-block;">
+                      Go to Login →
                     </a>
                   </td>
                 </tr>
@@ -249,16 +262,20 @@ function getWelcomeEmailTemplate(user) {
 // ✅ NEW: Send OTP Email Function
 async function sendOTPEmail(email, otp, name) {
   try {
-    const result = await resend.emails.send({
-      from: FROM_EMAIL,
+    console.log(`📤 Sending OTP to: ${email}`);
+    
+    const mailOptions = {
+      from: `"CCMS" <${process.env.GMAIL_USER}>`,
       to: email,
-      subject: "🔐 Verify Your Email - CCMS Registration",
+      subject: '🔐 Verify Your Email - CCMS Registration',
       html: getOTPEmailTemplate(name, otp),
-    });
-    console.log("✅ OTP email sent to:", email);
-    return { success: true, data: result };
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`✅ OTP email sent! Message ID: ${info.messageId}`);
+    return { success: true };
   } catch (error) {
-    console.error("❌ Failed to send OTP email:", error);
+    console.error('❌ Email error:', error.message);
     throw error;
   }
 }
@@ -266,18 +283,19 @@ async function sendOTPEmail(email, otp, name) {
 // ✅ NEW: Send Welcome Email Function
 async function sendWelcomeEmail(user) {
   try {
-    await resend.emails.send({
-      from: FROM_EMAIL,
+    const mailOptions = {
+      from: `"CCMS" <${process.env.GMAIL_USER}>`,
       to: user.email,
-      subject: "🎉 Welcome to CCMS - Registration Successful!",
+      subject: '🎉 Welcome to CCMS - Registration Successful!',
       html: getWelcomeEmailTemplate(user),
-    });
-    console.log("✅ Welcome email sent to:", user.email);
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`✅ Welcome email sent to ${user.email}`);
   } catch (error) {
-    console.error("❌ Failed to send welcome email:", error);
+    console.error('❌ Welcome email error:', error);
   }
 }
-
 // ---------- AUTH MIDDLEWARE ----------
 function auth(req, res, next) {
   const token = req.headers["authorization"]?.replace("Bearer ", "");
@@ -412,7 +430,7 @@ app.get("/api/files/pdf/:publicId", async (req, res) => {
 // ✅ NEW: OTP REGISTRATION ROUTES
 // ============================================
 
-// Step 1: Request OTP for Registration
+// ✅ FIXED: Request OTP for Registration
 app.post("/api/auth/register/request-otp", async (req, res) => {
   try {
     const { email, name } = req.body;
@@ -436,7 +454,11 @@ app.post("/api/auth/register/request-otp", async (req, res) => {
       });
     }
 
-    // Generate 6-digit OTP
+    // ✅ FIX 1: Force delete ALL old OTPs for this email (even expired ones)
+    const deleteResult = await OTPs.deleteMany({ email: normalizedEmail });
+    console.log(`🗑️ Deleted ${deleteResult.deletedCount} old OTPs for ${normalizedEmail}`);
+
+    // ✅ FIX 2: Generate FRESH OTP with timestamp to ensure uniqueness
     const otp = otpGenerator.generate(6, {
       digits: true,
       upperCaseAlphabets: false,
@@ -444,21 +466,24 @@ app.post("/api/auth/register/request-otp", async (req, res) => {
       specialChars: false,
     });
 
-    console.log(`📧 Generated OTP for ${normalizedEmail}: ${otp}`); // For testing
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 10 * 60 * 1000); // 10 minutes
 
-    // Delete any existing OTPs for this email
-    await OTPs.deleteMany({ email: normalizedEmail });
+    console.log(`📧 Generated NEW OTP for ${normalizedEmail}: ${otp} at ${now.toISOString()}`);
 
-    // Save new OTP (expires in 10 minutes)
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    // ✅ FIX 3: Insert new OTP with proper fields
     await OTPs.insertOne({
       email: normalizedEmail,
       otp: otp,
       name: name.trim(),
       verified: false,
-      createdAt: new Date(),
+      createdAt: now,
       expiresAt: expiresAt,
     });
+
+    // ✅ FIX 4: Verify OTP was saved
+    const savedOTP = await OTPs.findOne({ email: normalizedEmail, verified: false });
+    console.log(`✅ Saved OTP in DB: ${savedOTP?.otp} (should match ${otp})`);
 
     // Send OTP email
     await sendOTPEmail(normalizedEmail, otp, name);
@@ -477,7 +502,6 @@ app.post("/api/auth/register/request-otp", async (req, res) => {
     });
   }
 });
-
 // Step 2: Verify OTP and Complete Registration
 app.post("/api/auth/register/verify-otp", async (req, res) => {
   try {

@@ -1,3 +1,5 @@
+// src/api.js - COMPLETE WITH OTP FUNCTIONS
+
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:4000/api";
 
 async function handleResponse(res) {
@@ -16,6 +18,8 @@ async function handleResponse(res) {
 
   return data;
 }
+
+// ==================== EXISTING AUTH FUNCTIONS ====================
 
 export async function loginApi(email, password, role) {
   const res = await fetch(`${API_BASE}/auth/login`, {
@@ -41,6 +45,48 @@ export async function signupApi(name, roll, email, password, role) {
   return handleResponse(res);
 }
 
+// ==================== ✅ NEW: OTP REGISTRATION FUNCTIONS ====================
+
+// Step 1: Request OTP for registration
+export async function requestRegistrationOTP(email, name) {
+  const res = await fetch(`${API_BASE}/auth/register/request-otp`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ email, name }),
+  });
+
+  return handleResponse(res);
+}
+
+// Step 2: Verify OTP and complete registration
+export async function verifyOTPAndRegister(userData) {
+  const res = await fetch(`${API_BASE}/auth/register/verify-otp`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(userData),
+  });
+
+  return handleResponse(res);
+}
+
+// Resend OTP
+export async function resendOTP(email, name) {
+  const res = await fetch(`${API_BASE}/auth/register/resend-otp`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ email, name }),
+  });
+
+  return handleResponse(res);
+}
+
+// ==================== EXISTING PUBLIC API ====================
 
 // Get public stats for landing page
 export async function getLandingStatsApi() {
