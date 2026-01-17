@@ -1,10 +1,9 @@
-// src/components/ComplaintTable/ComplaintTable.jsx
-import React, { useState, useMemo } from "react";
+// src/components/complaintTable/ComplaintTable.jsx
+import React, { useState, useMemo, useEffect } from "react";
 import Badge from "../Badge";
 import EmptyState from "../EmptyState";
 import SortIcon from "./SortIcon";
-import ActionsDropdown from "./ActionsDropdown";
-import { RiEyeLine } from "react-icons/ri";
+import { RiEyeLine, RiEditLine } from "react-icons/ri";
 
 export default function ComplaintTable({
   complaints = [],
@@ -15,8 +14,14 @@ export default function ComplaintTable({
     key: "submittedAt",
     direction: "desc",
   });
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
-  const [openDropdownId, setOpenDropdownId] = useState(null);
+  // Detect screen size changes
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const handleSort = (key) => {
     setSortConfig((prev) => ({
@@ -30,7 +35,7 @@ export default function ComplaintTable({
     const date = new Date(d);
     if (isNaN(date.getTime())) return "Invalid";
     return date.toLocaleString("en-IN", {
-      dateStyle: "medium",
+      dateStyle: "short",
       timeStyle: "short",
     });
   };
@@ -77,18 +82,6 @@ export default function ComplaintTable({
     );
   }
 
-  const columns = [
-    { key: "id", label: "ID", sortable: false },
-    { key: "subject", label: "Subject", sortable: true },
-    { key: "submittedBy", label: "Submitted", sortable: false },
-    { key: "category", label: "Category", sortable: true },
-    { key: "location", label: "Location", sortable: false },
-    { key: "submittedAt", label: "Date", sortable: true },
-    { key: "status", label: "Status", sortable: false },
-    { key: "priority", label: "Priority", sortable: true },
-    { key: "actions", label: "Actions", sortable: false },
-  ];
-
   const getPriorityBadge = (priority) => {
     const p = (priority || "").toString().toLowerCase();
     if (p.includes("high") || p.includes("urgent")) {
@@ -103,9 +96,105 @@ export default function ComplaintTable({
     return <Badge status="Unknown" />;
   };
 
-  const getStatusBadge = (status) => {
-    return <Badge status={status} />;
-  };
+  // ===== MOBILE CARD VIEW =====
+  if (isMobile) {
+    return (
+      <div className="space-y-4 pb-20"> {/* Added padding for bottom nav */}
+        {sortedComplaints.map((complaint, index) => {
+          const id = complaint._id || complaint.id || index + 1;
+          const subject = complaint.subject || complaint.title || "Untitled";
+          const submittedBy = complaint.isAnonymous
+            ? "Anonymous 🕵️"
+            : complaint.submittedBy || complaint.name || complaint.email;
+          const category = complaint.category || complaint.department || "General";
+          const dateValue = complaint.submittedAt || complaint.createdAt;
+          const status = complaint.status || complaint.Status;
+          const priority = complaint.priority || complaint.Priority;
+
+          return (
+            <div
+              key={id}
+              className="bg-white dark:bg-gray-800 rounded-lg shadow-md border border-gray-200 dark:border-gray-700 p-4 space-y-3 active:shadow-lg transition-shadow"
+            >
+              {/* Header: ID + Status */}
+              <div className="flex justify-between items-start">
+                <span className="text-xs font-mono text-gray-500 dark:text-gray-400">
+                  #{complaint.complaintId || `CMP${String(index + 1).padStart(3, '0')}`}
+                </span>
+                <Badge status={status} />
+              </div>
+
+              {/* Title */}
+              <h3 className="font-semibold text-gray-900 dark:text-gray-100 line-clamp-2 text-base">
+                {subject}
+              </h3>
+
+              {/* Meta Grid */}
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <span className="text-gray-500 dark:text-gray-400 text-xs">Category</span>
+                  <p className="font-medium text-gray-800 dark:text-gray-200 truncate">{category}</p>
+                </div>
+                <div>
+                  <span className="text-gray-500 dark:text-gray-400 text-xs">Priority</span>
+                  <div className="mt-1">{getPriorityBadge(priority)}</div>
+                </div>
+              </div>
+
+              {/* Submitted By */}
+              <div className="text-sm">
+                <span className="text-gray-500 dark:text-gray-400 text-xs">Submitted by:</span>
+                <p className="font-medium text-gray-700 dark:text-gray-300 truncate">{submittedBy}</p>
+              </div>
+
+              {/* Date */}
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                📅 {formatDate(dateValue)}
+              </p>
+
+              {/* Actions */}
+              <div className="flex gap-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onActionClick && onActionClick("view", complaint);
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 bg-indigo-600 text-white py-2.5 rounded-lg font-medium hover:bg-indigo-700 active:bg-indigo-800 transition-colors shadow-sm"
+                >
+                  <RiEyeLine size={18} />
+                  View Details
+                </button>
+                {(status === "Pending" || status === "In Progress") && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onActionClick && onActionClick("edit", complaint);
+                    }}
+                    className="flex items-center justify-center gap-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-4 py-2.5 rounded-lg font-medium hover:bg-gray-300 dark:hover:bg-gray-600 active:bg-gray-400 transition-colors shadow-sm"
+                  >
+                    <RiEditLine size={18} />
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // ===== DESKTOP TABLE VIEW =====
+  const columns = [
+    { key: "id", label: "ID", sortable: false },
+    { key: "subject", label: "Subject", sortable: true },
+    { key: "submittedBy", label: "Submitted", sortable: false },
+    { key: "category", label: "Category", sortable: true },
+    { key: "location", label: "Location", sortable: false },
+    { key: "submittedAt", label: "Date", sortable: true },
+    { key: "status", label: "Status", sortable: false },
+    { key: "priority", label: "Priority", sortable: true },
+    { key: "actions", label: "Actions", sortable: false },
+  ];
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-b-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-x-auto">
@@ -152,12 +241,9 @@ export default function ComplaintTable({
                 className="hover:bg-gray-50 dark:hover:bg-gray-900/40 transition-colors cursor-pointer"
                 onClick={() => onRowClick && onRowClick(id)}
               >
-                {/* ID */}
                 <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500">
                   #{index + 1}
                 </td>
-
-                {/* Subject */}
                 <td className="px-4 py-3 max-w-xs">
                   <div className="flex flex-col">
                     <span className="font-medium text-gray-800 dark:text-gray-100 line-clamp-2">
@@ -168,68 +254,39 @@ export default function ComplaintTable({
                     </span>
                   </div>
                 </td>
-
-                {/* Submitted by */}
                 <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-200">
                   {submittedBy}
                 </td>
-
-                {/* Category */}
                 <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-200">
                   {category}
                 </td>
-
-                {/* Location */}
                 <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-200">
                   {location}
                 </td>
-
-                {/* Date */}
                 <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-200">
                   {formatDate(dateValue)}
                 </td>
-
-                {/* Status */}
-                <td className="px-4 py-3 whitespace-nowrap">{getStatusBadge(status)}</td>
-
-                {/* Priority */}
+                <td className="px-4 py-3 whitespace-nowrap">
+                  <Badge status={status} />
+                </td>
                 <td className="px-4 py-3 whitespace-nowrap">
                   {getPriorityBadge(priority)}
                 </td>
-
-                {/* Actions */}
                 <td
                   className="px-4 py-3 whitespace-nowrap text-right"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <div className="flex items-center justify-end gap-2">
-                    {/* View Button */}
-                    <button
-                      onClick={() => {
-                        console.log("👁️ View clicked for:", id);
-                        onActionClick && onActionClick("view", complaint);
-                      }}
-                      className="px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1 transition bg-blue-600 hover:bg-blue-700 text-white"
-                    >
-                      <RiEyeLine size={14} />
-                      View
-                    </button>
-
-                    {/* 3-dot Dropdown */}
-                    <ActionsDropdown
-                      complaintId={id}
-                      openDropdownId={openDropdownId}
-                      setOpenDropdownId={setOpenDropdownId}
-                      onRowClick={(cId) => {
-                        console.log("👁️ View Details clicked for:", cId);
-                        onActionClick && onActionClick("view", complaint);
-                      }}
-                      onActionClick={(cId, action) => {
-                        console.log(`🔧 ${action} clicked for:`, cId);
-                        onActionClick && onActionClick(action, complaint);
-                      }}
-                    />
-                  </div>
+                  {/* ✅ ONLY VIEW BUTTON - No 3-dot menu */}
+                  <button
+                    onClick={() => {
+                      console.log("👁️ View clicked for:", id);
+                      onActionClick && onActionClick("view", complaint);
+                    }}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 active:bg-indigo-800 transition-colors shadow-sm hover:shadow-md"
+                  >
+                    <RiEyeLine size={16} />
+                    View
+                  </button>
                 </td>
               </tr>
             );

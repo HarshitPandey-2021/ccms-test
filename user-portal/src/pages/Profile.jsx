@@ -1,416 +1,660 @@
-// src/pages/Profile.jsx
+// src/pages/Profile.jsx - COMPLETE EDIT PROFILE
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
-import RoleBadge from '../components/common/RoleBadge';
 import LoadingSpinner from '../components/common/LoadingSpinner';
-import { getMyStats, updateProfile, changePassword } from '../api'; // ✅ Add imports
-import { 
-  RiUserLine, 
-  RiMailLine, 
+import api from '../api';
+import {
+  RiUserLine,
+  RiMailLine,
   RiPhoneLine,
-  RiIdCardLine,
-  RiBuildingLine,
-  RiSaveLine,
   RiLockPasswordLine,
-  RiCheckboxCircleLine,
-  RiCloseLine // ✅ Add for modal close
+  RiEditLine,
+  RiSaveLine,
+  RiCloseLine,
+  RiEyeLine,
+  RiEyeOffLine,
+  RiShieldUserLine,
+  RiCalendarLine,
+  RiCheckLine,
+  RiErrorWarningLine,
 } from 'react-icons/ri';
 
 const Profile = () => {
+  const navigate = useNavigate();
   const { user, updateUser } = useAuth();
-  const { success, error } = useToast();
+  const { success, error: showError } = useToast();
+
+  const [editMode, setEditMode] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [editing, setEditing] = useState(false);
-  
+  const [showPassword, setShowPassword] = useState({
+    current: false,
+    new: false,
+    confirm: false,
+  });
+
   const [formData, setFormData] = useState({
-    name: user?.name || '',
-    phone: user?.phone || ''
-  });
-
-  // ✅ Fix stats with useState + useEffect
-  const [stats, setStats] = useState({
-    total: 0,
-    pending: 0,
-    inProgress: 0,
-    resolved: 0,
-  });
-
-  useEffect(() => {
-    async function fetchStats() {
-      try {
-        const data = await getMyStats();
-        setStats(data);
-      } catch (err) {
-        console.error("Failed to fetch stats:", err);
-      }
-    }
-    fetchStats();
-  }, []);
-
-  // ✅ Add password modal state
-  const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const [passwordData, setPasswordData] = useState({
+    name: '',
+    email: '',
+    phone: '',
     currentPassword: '',
     newPassword: '',
-    confirmPassword: ''
+    confirmPassword: '',
   });
-  const [passwordLoading, setPasswordLoading] = useState(false);
 
-  const handleChange = (e) => {
-    setFormData(prev => ({
-      ...prev,
-      [e.target.name]: e.target.value
-    }));
+  const [errors, setErrors] = useState({});
+  const [touched, setTouched] = useState({});
+
+  // Initialize form data
+  useEffect(() => {
+    if (user) {
+      setFormData({
+        name: user.name || '',
+        email: user.email || '',
+        phone: user.phone || '',
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: '',
+      });
+    }
+  }, [user]);
+
+  // Validation rules
+  const validateField = (name, value) => {
+    switch (name) {
+      case 'name':
+        if (!value.trim()) return 'Name is required';
+        if (value.length < 3) return 'Name must be at least 3 characters';
+        return '';
+
+      case 'email':
+        if (!value.trim()) return 'Email is required';
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return 'Invalid email format';
+        return '';
+
+      case 'phone':
+        if (value && !/^[6-9]\d{9}$/.test(value)) return 'Invalid phone number (10 digits)';
+        return '';
+
+      case 'currentPassword':
+        if (formData.newPassword && !value) return 'Current password required to change password';
+        return '';
+
+      case 'newPassword':
+        if (value && value.length < 6) return 'Password must be at least 6 characters';
+        if (value && value === formData.currentPassword) return 'New password must be different';
+        return '';
+
+      case 'confirmPassword':
+        if (formData.newPassword && value !== formData.newPassword) return 'Passwords do not match';
+        return '';
+
+      default:
+        return '';
+    }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  // Handle input change
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+    setTouched((prev) => ({ ...prev, [name]: true }));
+
+    // Real-time validation
+    const error = validateField(name, value);
+    setErrors((prev) => ({ ...prev, [name]: error }));
+  };
+
+  // Handle blur
+  const handleBlur = (e) => {
+    const { name, value } = e.target;
+    setTouched((prev) => ({ ...prev, [name]: true }));
+    const error = validateField(name, value);
+    setErrors((prev) => ({ ...prev, [name]: error }));
+  };
+
+  // Validate all fields
+  const validateAll = () => {
+    const newErrors = {};
+    
+    newErrors.name = validateField('name', formData.name);
+    newErrors.email = validateField('email', formData.email);
+    newErrors.phone = validateField('phone', formData.phone);
+
+    // Password validation only if changing password
+    if (formData.newPassword) {
+      newErrors.currentPassword = validateField('currentPassword', formData.currentPassword);
+      newErrors.newPassword = validateField('newPassword', formData.newPassword);
+      newErrors.confirmPassword = validateField('confirmPassword', formData.confirmPassword);
+    }
+
+    const filteredErrors = Object.fromEntries(
+      Object.entries(newErrors).filter(([_, v]) => v)
+    );
+
+    setErrors(filteredErrors);
+    return Object.keys(filteredErrors).length === 0;
+  };
+
+  // Handle save
+  const handleSave = async () => {
+    if (!validateAll()) {
+      showError('Please fix all errors before saving');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      await updateProfile(formData); // ✅ Use real API
-      updateUser(formData);
+      const token = localStorage.getItem('token');
+      const updateData = {
+        name: formData.name.trim(),
+        email: formData.email.trim(),
+        phone: formData.phone?.trim() || undefined,
+      };
+
+      // Add password fields if changing password
+      if (formData.newPassword) {
+        updateData.currentPassword = formData.currentPassword;
+        updateData.newPassword = formData.newPassword;
+      }
+
+      const response = await api.updateProfile(updateData, token);
+
+      // Update auth context
+      updateUser(response.user);
+
       success('Profile updated successfully!');
-      setEditing(false);
+      setEditMode(false);
+
+      // Clear password fields
+      setFormData((prev) => ({
+        ...prev,
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: '',
+      }));
+      setTouched({});
+      setErrors({});
     } catch (err) {
-      error(err.message || 'Failed to update profile');
+      console.error('Update error:', err);
+      showError(err.response?.data?.message || 'Failed to update profile');
     } finally {
       setLoading(false);
     }
   };
 
-  // ✅ Add password change handler
-  const handlePasswordChange = (e) => {
-    setPasswordData(prev => ({
-      ...prev,
-      [e.target.name]: e.target.value
-    }));
+  // Handle cancel
+  const handleCancel = () => {
+    setEditMode(false);
+    setFormData({
+      name: user.name || '',
+      email: user.email || '',
+      phone: user.phone || '',
+      currentPassword: '',
+      newPassword: '',
+      confirmPassword: '',
+    });
+    setErrors({});
+    setTouched({});
   };
 
-  const handlePasswordSubmit = async (e) => {
-    e.preventDefault();
+  // Toggle password visibility
+  const togglePasswordVisibility = (field) => {
+    setShowPassword((prev) => ({ ...prev, [field]: !prev[field] }));
+  };
 
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
-      error('New passwords do not match');
-      return;
+  // Get field status icon
+  const getFieldStatus = (fieldName) => {
+    if (!touched[fieldName]) return null;
+    if (errors[fieldName]) {
+      return <RiErrorWarningLine className="h-5 w-5 text-red-500" />;
     }
-
-    if (passwordData.newPassword.length < 6) {
-      error('Password must be at least 6 characters');
-      return;
+    if (formData[fieldName]) {
+      return <RiCheckLine className="h-5 w-5 text-green-500" />;
     }
-
-    setPasswordLoading(true);
-
-    try {
-      await changePassword(passwordData.currentPassword, passwordData.newPassword);
-      success('Password changed successfully!');
-      setShowPasswordModal(false);
-      setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
-    } catch (err) {
-      error(err.message || 'Failed to change password');
-    } finally {
-      setPasswordLoading(false);
-    }
+    return null;
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 sm:p-6 lg:p-8">
+    <div className="p-4 sm:p-6 lg:p-8 pb-24 md:pb-8">
       <div className="max-w-4xl mx-auto">
-        
         {/* Header */}
         <div className="mb-6 sm:mb-8">
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-800 dark:text-gray-200 mb-2">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-gray-800 dark:text-gray-200 mb-2">
             My Profile
           </h1>
           <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400">
-            View and manage your account information
+            Manage your account information and settings
           </p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
-          {/* Left Column - Profile Card */}
-          <div className="lg:col-span-1">
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6 text-center">
-              <div className="w-24 h-24 mx-auto bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-4xl mb-4">
-                {user?.name?.charAt(0).toUpperCase()}
+        {/* Profile Card */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+          {/* Profile Header */}
+          <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+            <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
+              {/* Avatar */}
+              <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-white/10 backdrop-blur-sm border-4 border-white/20 flex items-center justify-center text-white font-bold text-3xl sm:text-4xl shadow-lg">
+                {user?.name?.charAt(0).toUpperCase() || 'U'}
               </div>
-              <h2 className="text-xl font-bold text-gray-800 dark:text-gray-200 mb-2">
-                {user?.name}
-              </h2>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                {user?.email}
-              </p>
-              <RoleBadge role={user?.role} />
 
-              {/* Stats */}
-              <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700 grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
-                    {stats.total}
-                  </p>
-                  <p className="text-xs text-gray-600 dark:text-gray-400">
-                    Total Complaints
-                  </p>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-                    {stats.resolved}
-                  </p>
-                  <p className="text-xs text-gray-600 dark:text-gray-400">
-                    Resolved
-                  </p>
+              {/* User Info */}
+              <div className="flex-1 text-center sm:text-left">
+                <h2 className="text-2xl sm:text-3xl font-bold text-white mb-1">
+                  {user?.name || 'Student'}
+                </h2>
+                <p className="text-indigo-100 text-sm sm:text-base mb-2">
+                  {user?.email}
+                </p>
+                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                  {user?.rollNo && (
+                    <span className="inline-flex items-center gap-1 px-3 py-1 bg-white/20 backdrop-blur-sm text-white rounded-full text-xs sm:text-sm font-semibold">
+                      <RiShieldUserLine className="h-4 w-4" />
+                      {user.rollNo}
+                    </span>
+                  )}
+                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-white/20 backdrop-blur-sm text-white rounded-full text-xs sm:text-sm font-semibold capitalize">
+                    {user?.role || 'Student'}
+                  </span>
                 </div>
               </div>
+
+              {/* Edit Button */}
+              {!editMode && (
+                <button
+                  onClick={() => setEditMode(true)}
+                  className="flex items-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-white text-indigo-600 rounded-xl hover:bg-indigo-50 transition-all font-semibold shadow-lg hover:shadow-xl"
+                >
+                  <RiEditLine className="h-5 w-5" />
+                  <span className="hidden sm:inline">Edit Profile</span>
+                  <span className="sm:hidden">Edit</span>
+                </button>
+              )}
             </div>
           </div>
 
-          {/* Right Column - Details Form */}
-          <div className="lg:col-span-2 space-y-6">
-            
-            {/* Personal Information */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200">
-                  Personal Information
-                </h3>
-                {!editing && (
-                  <button
-                    onClick={() => setEditing(true)}
-                    className="px-4 py-2 text-sm font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-colors"
-                  >
-                    Edit Profile
-                  </button>
-                )}
-              </div>
+          {/* Profile Content */}
+          <div className="p-4 sm:p-6 lg:p-8 space-y-6">
+            {/* Basic Information Section */}
+            <div>
+              <h3 className="text-lg sm:text-xl font-bold text-gray-800 dark:text-gray-200 mb-4 flex items-center gap-2">
+                <RiUserLine className="h-5 w-5 sm:h-6 sm:w-6 text-indigo-600 dark:text-indigo-400" />
+                Basic Information
+              </h3>
 
-              <form onSubmit={handleSubmit} className="space-y-4">
-                
+              <div className="space-y-4 sm:space-y-5">
                 {/* Name */}
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                    <RiUserLine className="inline h-4 w-4 mr-2" />
-                    Full Name
+                    Full Name <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="text"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleChange}
-                    disabled={!editing}
-                    className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-100 dark:disabled:bg-gray-700 disabled:cursor-not-allowed transition-all"
-                  />
+                  {editMode ? (
+                    <div className="relative">
+                      <input
+                        type="text"
+                        name="name"
+                        value={formData.name}
+                        onChange={handleChange}
+                        onBlur={handleBlur}
+                        className={`w-full px-4 py-2.5 sm:py-3 pr-12 rounded-lg border-2 transition-all ${
+                          touched.name && errors.name
+                            ? 'border-red-500 focus:ring-red-500'
+                            : touched.name
+                            ? 'border-green-500 focus:ring-green-500'
+                            : 'border-gray-300 dark:border-gray-600 focus:ring-indigo-500'
+                        } bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2`}
+                      />
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        {getFieldStatus('name')}
+                      </div>
+                      {touched.name && errors.name && (
+                        <p className="text-xs sm:text-sm text-red-500 mt-2 flex items-center gap-1">
+                          <RiErrorWarningLine className="h-4 w-4" />
+                          {errors.name}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-base sm:text-lg text-gray-800 dark:text-gray-200 font-medium">
+                      {user?.name || 'Not set'}
+                    </p>
+                  )}
                 </div>
 
-                {/* Email (Read-only) */}
+                {/* Email */}
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                    <RiMailLine className="inline h-4 w-4 mr-2" />
-                    Email Address
+                    <RiMailLine className="inline h-4 w-4 mr-1" />
+                    Email Address <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="email"
-                    value={user?.email}
-                    disabled
-                    className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 cursor-not-allowed"
-                  />
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Email cannot be changed
-                  </p>
+                  {editMode ? (
+                    <div className="relative">
+                      <input
+                        type="email"
+                        name="email"
+                        value={formData.email}
+                        onChange={handleChange}
+                        onBlur={handleBlur}
+                        className={`w-full px-4 py-2.5 sm:py-3 pr-12 rounded-lg border-2 transition-all ${
+                          touched.email && errors.email
+                            ? 'border-red-500 focus:ring-red-500'
+                            : touched.email
+                            ? 'border-green-500 focus:ring-green-500'
+                            : 'border-gray-300 dark:border-gray-600 focus:ring-indigo-500'
+                        } bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2`}
+                      />
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        {getFieldStatus('email')}
+                      </div>
+                      {touched.email && errors.email && (
+                        <p className="text-xs sm:text-sm text-red-500 mt-2 flex items-center gap-1">
+                          <RiErrorWarningLine className="h-4 w-4" />
+                          {errors.email}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-base sm:text-lg text-gray-800 dark:text-gray-200 font-medium">
+                      {user?.email || 'Not set'}
+                    </p>
+                  )}
                 </div>
 
                 {/* Phone */}
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                    <RiPhoneLine className="inline h-4 w-4 mr-2" />
+                    <RiPhoneLine className="inline h-4 w-4 mr-1" />
                     Phone Number
                   </label>
-                  <input
-                    type="tel"
-                    name="phone"
-                    value={formData.phone}
-                    onChange={handleChange}
-                    disabled={!editing}
-                    className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-100 dark:disabled:bg-gray-700 disabled:cursor-not-allowed transition-all"
-                  />
+                  {editMode ? (
+                    <div className="relative">
+                      <input
+                        type="tel"
+                        name="phone"
+                        value={formData.phone}
+                        onChange={handleChange}
+                        onBlur={handleBlur}
+                        placeholder="10-digit mobile number"
+                        className={`w-full px-4 py-2.5 sm:py-3 pr-12 rounded-lg border-2 transition-all ${
+                          touched.phone && errors.phone
+                            ? 'border-red-500 focus:ring-red-500'
+                            : touched.phone && formData.phone
+                            ? 'border-green-500 focus:ring-green-500'
+                            : 'border-gray-300 dark:border-gray-600 focus:ring-indigo-500'
+                        } bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2`}
+                      />
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        {getFieldStatus('phone')}
+                      </div>
+                      {touched.phone && errors.phone && (
+                        <p className="text-xs sm:text-sm text-red-500 mt-2 flex items-center gap-1">
+                          <RiErrorWarningLine className="h-4 w-4" />
+                          {errors.phone}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-base sm:text-lg text-gray-800 dark:text-gray-200 font-medium">
+                      {user?.phone || 'Not set'}
+                    </p>
+                  )}
                 </div>
 
-                {/* Role-specific fields (Read-only) */}
-                {user?.role === 'student' ? (
-                  <>
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                        <RiIdCardLine className="inline h-4 w-4 mr-2" />
-                        Roll Number
-                      </label>
-                      <input
-                        type="text"
-                        value={user?.roll || 'N/A'}
-                        disabled
-                        className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 cursor-not-allowed"
-                      />
-                    </div>
-                  </>
-                ) : null}
-
-                {/* Save Button (only when editing) */}
-                {editing && (
-                  <div className="flex gap-3 pt-4">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditing(false);
-                        setFormData({ name: user?.name, phone: user?.phone });
-                      }}
-                      disabled={loading}
-                      className="flex-1 px-6 py-3 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 font-semibold hover:bg-gray-100 dark:hover:bg-gray-700 transition-all disabled:opacity-50"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={loading}
-                      className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition-all disabled:opacity-50 shadow-lg"
-                    >
-                      {loading ? (
-                        <>
-                          <LoadingSpinner />
-                          Saving...
-                        </>
-                      ) : (
-                        <>
-                          <RiSaveLine className="h-5 w-5" />
-                          Save Changes
-                        </>
-                      )}
-                    </button>
+                {/* Read-only fields */}
+                {user?.rollNo && (
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                      Roll Number
+                    </label>
+                    <p className="text-base sm:text-lg text-gray-800 dark:text-gray-200 font-medium">
+                      {user.rollNo}
+                    </p>
                   </div>
                 )}
-              </form>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                    <RiCalendarLine className="inline h-4 w-4 mr-1" />
+                    Member Since
+                  </label>
+                  <p className="text-base sm:text-lg text-gray-800 dark:text-gray-200 font-medium">
+                    {user?.createdAt
+                      ? new Date(user.createdAt).toLocaleDateString('en-US', {
+                          month: 'long',
+                          day: 'numeric',
+                          year: 'numeric',
+                        })
+                      : 'N/A'}
+                  </p>
+                </div>
+              </div>
             </div>
 
-            {/* Change Password Section */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
-              <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200 mb-4">
-                <RiLockPasswordLine className="inline h-5 w-5 mr-2" />
-                Security
-              </h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                Keep your account secure by using a strong password
-              </p>
-              <button 
-                onClick={() => setShowPasswordModal(true)}
-                className="w-full sm:w-auto px-6 py-3 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 font-semibold rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-all"
-              >
-                Change Password
-              </button>
-            </div>
+            {/* Change Password Section (Only in Edit Mode) */}
+            {editMode && (
+              <div className="pt-6 border-t border-gray-200 dark:border-gray-700">
+                <h3 className="text-lg sm:text-xl font-bold text-gray-800 dark:text-gray-200 mb-4 flex items-center gap-2">
+                  <RiLockPasswordLine className="h-5 w-5 sm:h-6 sm:w-6 text-indigo-600 dark:text-indigo-400" />
+                  Change Password
+                </h3>
+                <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-4">
+                  Leave blank if you don't want to change your password
+                </p>
 
-          </div>
-        </div>
-      </div>
+                <div className="space-y-4 sm:space-y-5">
+                  {/* Current Password */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                      Current Password
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showPassword.current ? 'text' : 'password'}
+                        name="currentPassword"
+                        value={formData.currentPassword}
+                        onChange={handleChange}
+                        onBlur={handleBlur}
+                        placeholder="Enter current password"
+                        className={`w-full px-4 py-2.5 sm:py-3 pr-12 rounded-lg border-2 transition-all ${
+                          touched.currentPassword && errors.currentPassword
+                            ? 'border-red-500 focus:ring-red-500'
+                            : 'border-gray-300 dark:border-gray-600 focus:ring-indigo-500'
+                        } bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => togglePasswordVisibility('current')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                      >
+                        {showPassword.current ? (
+                          <RiEyeOffLine className="h-5 w-5" />
+                        ) : (
+                          <RiEyeLine className="h-5 w-5" />
+                        )}
+                      </button>
+                    </div>
+                    {touched.currentPassword && errors.currentPassword && (
+                      <p className="text-xs sm:text-sm text-red-500 mt-2 flex items-center gap-1">
+                        <RiErrorWarningLine className="h-4 w-4" />
+                        {errors.currentPassword}
+                      </p>
+                    )}
+                  </div>
 
-      {/* ✅ Password Change Modal */}
-      {showPasswordModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 w-full max-w-md">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-              <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200">
-                Change Password
-              </h3>
-              <button
-                onClick={() => {
-                  setShowPasswordModal(false);
-                  setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
-                }}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-              >
-                <RiCloseLine className="h-6 w-6 text-gray-600 dark:text-gray-300" />
-              </button>
-            </div>
-            <form onSubmit={handlePasswordSubmit} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                  Current Password
-                </label>
-                <input
-                  type="password"
-                  name="currentPassword"
-                  value={passwordData.currentPassword}
-                  onChange={handlePasswordChange}
-                  required
-                  className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Enter current password"
-                />
+                  {/* New Password */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                      New Password
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showPassword.new ? 'text' : 'password'}
+                        name="newPassword"
+                        value={formData.newPassword}
+                        onChange={handleChange}
+                        onBlur={handleBlur}
+                        placeholder="Enter new password (min 6 characters)"
+                        className={`w-full px-4 py-2.5 sm:py-3 pr-12 rounded-lg border-2 transition-all ${
+                          touched.newPassword && errors.newPassword
+                            ? 'border-red-500 focus:ring-red-500'
+                            : touched.newPassword && formData.newPassword.length >= 6
+                            ? 'border-green-500 focus:ring-green-500'
+                            : 'border-gray-300 dark:border-gray-600 focus:ring-indigo-500'
+                        } bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => togglePasswordVisibility('new')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                      >
+                        {showPassword.new ? (
+                          <RiEyeOffLine className="h-5 w-5" />
+                        ) : (
+                          <RiEyeLine className="h-5 w-5" />
+                        )}
+                      </button>
+                    </div>
+                    {touched.newPassword && errors.newPassword && (
+                      <p className="text-xs sm:text-sm text-red-500 mt-2 flex items-center gap-1">
+                        <RiErrorWarningLine className="h-4 w-4" />
+                        {errors.newPassword}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Confirm Password */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                      Confirm New Password
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showPassword.confirm ? 'text' : 'password'}
+                        name="confirmPassword"
+                        value={formData.confirmPassword}
+                        onChange={handleChange}
+                        onBlur={handleBlur}
+                        placeholder="Re-enter new password"
+                        className={`w-full px-4 py-2.5 sm:py-3 pr-12 rounded-lg border-2 transition-all ${
+                          touched.confirmPassword && errors.confirmPassword
+                            ? 'border-red-500 focus:ring-red-500'
+                            : touched.confirmPassword &&
+                              formData.confirmPassword === formData.newPassword &&
+                              formData.newPassword
+                            ? 'border-green-500 focus:ring-green-500'
+                            : 'border-gray-300 dark:border-gray-600 focus:ring-indigo-500'
+                        } bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => togglePasswordVisibility('confirm')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                      >
+                        {showPassword.confirm ? (
+                          <RiEyeOffLine className="h-5 w-5" />
+                        ) : (
+                          <RiEyeLine className="h-5 w-5" />
+                        )}
+                      </button>
+                    </div>
+                    {touched.confirmPassword && errors.confirmPassword && (
+                      <p className="text-xs sm:text-sm text-red-500 mt-2 flex items-center gap-1">
+                        <RiErrorWarningLine className="h-4 w-4" />
+                        {errors.confirmPassword}
+                      </p>
+                    )}
+                  </div>
+                </div>
               </div>
+            )}
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                  New Password
-                </label>
-                <input
-                  type="password"
-                  name="newPassword"
-                  value={passwordData.newPassword}
-                  onChange={handlePasswordChange}
-                  required
-                  minLength={6}
-                  className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Enter new password (min 6 characters)"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                  Confirm New Password
-                </label>
-                <input
-                  type="password"
-                  name="confirmPassword"
-                  value={passwordData.confirmPassword}
-                  onChange={handlePasswordChange}
-                  required
-                  className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Confirm new password"
-                />
-              </div>
-
-              <div className="flex gap-3 pt-4">
+            {/* Action Buttons */}
+            {editMode && (
+              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-6 border-t border-gray-200 dark:border-gray-700">
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowPasswordModal(false);
-                    setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
-                  }}
-                  disabled={passwordLoading}
-                  className="flex-1 px-6 py-3 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 font-semibold hover:bg-gray-100 dark:hover:bg-gray-700 transition-all disabled:opacity-50"
+                  onClick={handleCancel}
+                  disabled={loading}
+                  className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 border-2 border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 font-bold hover:bg-gray-100 dark:hover:bg-gray-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                 >
+                  <RiCloseLine className="h-5 w-5" />
                   Cancel
                 </button>
                 <button
-                  type="submit"
-                  disabled={passwordLoading}
-                  className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition-all disabled:opacity-50 shadow-lg"
+                  type="button"
+                  onClick={handleSave}
+                  disabled={loading || Object.keys(errors).some((key) => errors[key])}
+                  className="w-full sm:flex-1 flex items-center justify-center gap-2 sm:gap-3 px-6 sm:px-8 py-3 sm:py-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
                 >
-                  {passwordLoading ? (
+                  {loading ? (
                     <>
                       <LoadingSpinner />
-                      Changing...
+                      <span>Saving...</span>
                     </>
                   ) : (
                     <>
-                      <RiLockPasswordLine className="h-5 w-5" />
-                      Change Password
+                      <RiSaveLine className="h-5 w-5" />
+                      <span>Save Changes</span>
                     </>
                   )}
                 </button>
               </div>
-            </form>
+            )}
           </div>
         </div>
-      )}
+
+        {/* Account Stats */}
+        <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg flex items-center justify-center">
+                <RiUserLine className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+              </div>
+              <div>
+                <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Account Type</p>
+                <p className="text-base sm:text-lg font-bold text-gray-800 dark:text-gray-200 capitalize">
+                  {user?.role || 'Student'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
+                <RiCheckLine className="h-6 w-6 text-green-600 dark:text-green-400" />
+              </div>
+              <div>
+                <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Status</p>
+                <p className="text-base sm:text-lg font-bold text-green-600 dark:text-green-400">
+                  Active
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center">
+                <RiCalendarLine className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div>
+                <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Joined</p>
+                <p className="text-base sm:text-lg font-bold text-gray-800 dark:text-gray-200">
+                  {user?.createdAt
+                    ? new Date(user.createdAt).toLocaleDateString('en-US', {
+                        month: 'short',
+                        year: 'numeric',
+                      })
+                    : 'N/A'}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

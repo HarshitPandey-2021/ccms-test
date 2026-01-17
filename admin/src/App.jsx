@@ -1,8 +1,10 @@
+// src/App.jsx - Mobile Responsive with Bottom Navigation
 import React, { useEffect, useState } from "react";
 import { BrowserRouter as Router, Routes, Route, useLocation, Navigate, useNavigate } from "react-router-dom";
 import Navbar from "./components/Navbar.jsx";
 import Sidebar from "./components/Sidebar.jsx";
 import Breadcrumb from "./components/Breadcrumb.jsx";
+import BottomNavigation from "./components/BottomNavigation.jsx"; // ✅ NEW
 import AuthInitializer from "./components/AuthInitializer.jsx";
 import useKeyboardShortcuts from "./hooks/useKeyboardShortcuts.js";
 import { ToastProvider } from "./context/ToastContext.jsx";
@@ -14,14 +16,12 @@ import {
 import {
   getAdminToken,
   getAdminUser,
-  logoutAdmin,
 } from "./utils/tokenUtils.js";
 import Dashboard from "./pages/Dashboard.jsx";
 import Complaints from "./pages/Complaints.jsx";
 import Analytics from "./pages/Analytics.jsx";
 import ActivityLogs from "./pages/ActivityLogs.jsx";
 import Profile from "./pages/Profile.jsx";
-import NotFound from "./pages/NotFound.jsx";
 
 function getPageName(path) {
   const routes = {
@@ -35,16 +35,14 @@ function getPageName(path) {
   return routes[path] || "Unknown Page";
 }
 
-// ✅ NEW: Handle refresh 404 issue
+// ✅ Handle refresh 404 issue
 function RouteHandler() {
   const navigate = useNavigate();
   
   useEffect(() => {
-    // Check if we're on an invalid route on page load
     const validRoutes = ['/', '/dashboard', '/complaints', '/analytics', '/activity-logs', '/profile', '/unauthorized'];
     const currentPath = window.location.pathname;
     
-    // If route is not valid and we have auth, redirect to dashboard
     if (!validRoutes.includes(currentPath)) {
       const token = getAdminToken();
       if (token) {
@@ -81,6 +79,7 @@ function ProtectedRoute({ children }) {
 
 function AppContent() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const location = useLocation();
 
   useKeyboardShortcuts();
@@ -103,17 +102,21 @@ function AppContent() {
     });
   }, [location.pathname]);
 
+  // Close sidebar on mobile when route changes
   useEffect(() => {
-    if (window.innerWidth < 768) {
+    if (isMobile) {
       setSidebarOpen(false);
     }
-  }, [location.pathname]);
+  }, [location.pathname, isMobile]);
 
+  // Handle responsive behavior
   useEffect(() => {
     function handleResize() {
-      if (window.innerWidth >= 768) setSidebarOpen(true);
-      else setSidebarOpen(false);
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      setSidebarOpen(!mobile); // Auto-open on desktop, closed on mobile
     }
+    
     handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
@@ -125,14 +128,23 @@ function AppContent() {
 
   return (
     <ToastProvider>
-      <RouteHandler /> {/* ✅ NEW: Add this */}
-      <div className="min-h-screen flex bg-gradient-to-br from-gray-50 via-gray-100 to-gray-200">
+      <RouteHandler />
+      <div className="min-h-screen flex bg-gray-50 dark:bg-gray-900">
+        {/* Sidebar */}
         <Sidebar isOpen={sidebarOpen} toggleSidebar={toggleSidebar} />
-        <div className="flex flex-col flex-1 min-h-screen transition-all duration-200">
+        
+        {/* Main Content */}
+        <div className="flex flex-col flex-1 min-h-screen overflow-hidden">
+          {/* Navbar */}
           <Navbar toggleSidebar={toggleSidebar} />
-          <Breadcrumb />
-          <main className="flex-1 bg-gray-50 dark:bg-gray-900">
-          <div className="p-4 md:p-6 lg:p-8">
+          
+          {/* Breadcrumb (hide on mobile) */}
+          <div className="hidden md:block">
+            <Breadcrumb />
+          </div>
+          
+          {/* Main Content Area */}
+          <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900 pb-16 md:pb-0">
             <Routes>
               <Route
                 path="/"
@@ -185,34 +197,36 @@ function AppContent() {
               <Route
                 path="/unauthorized"
                 element={
-                  <div className="flex flex-col items-center justify-center min-h-screen text-center bg-gray-900">
-                    <h1 className="text-3xl font-semibold mb-4 text-white">
+                  <div className="flex flex-col items-center justify-center min-h-screen text-center bg-gray-900 p-4">
+                    <h1 className="text-2xl sm:text-3xl font-semibold mb-4 text-white">
                       Unauthorized Access
                     </h1>
-                    <p className="text-gray-400 mb-6 max-w-md">
+                    <p className="text-gray-400 mb-6 max-w-md text-sm sm:text-base">
                       You need to login as an admin from the main portal to access this panel.
                     </p>
                     <a
-                      href="https://ccms-home.vercel.app/"
+                      href="https://landing-test-liard-one.vercel.app/"
                       className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-semibold"
                     >
-                      Go to home
+                      Go to Home
                     </a>
                   </div>
                 }
               />
-              {/* ✅ NEW: Catch all invalid routes */}
+              {/* Catch all invalid routes */}
               <Route 
                 path="*" 
                 element={
                   <ProtectedRoute>
-                    <Navigate to="/" replace />
+                    <Navigate to="/dashboard" replace />
                   </ProtectedRoute>
                 }
               />
             </Routes>
-            </div>
           </main>
+
+          {/* ✅ Bottom Navigation (Mobile Only) */}
+          <BottomNavigation />
         </div>
       </div>
     </ToastProvider>

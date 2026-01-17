@@ -1,5 +1,5 @@
-// src/pages/SubmitComplaint.jsx
-import React, { useState } from 'react';
+// src/pages/SubmitComplaint.jsx - FIXED PROGRESS (0% START)
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
@@ -15,16 +15,15 @@ import {
   RiImageAddLine,
   RiFilePdfLine,
   RiCloseLine,
-  RiAlertLine,
+  RiEyeOffLine,
   RiFlagLine,
   RiMapPinLine,
   RiFileTextLine,
-  RiEyeOffLine,
 } from 'react-icons/ri';
 
 const SubmitComplaint = () => {
   const navigate = useNavigate();
-  const { user } = useAuth(); 
+  const { user } = useAuth();
   const { success, error: showError } = useToast();
 
   const [loading, setLoading] = useState(false);
@@ -32,16 +31,17 @@ const SubmitComplaint = () => {
     subject: '',
     category: '',
     location: '',
-    priority: 'Medium',
+    priority: '', // ✅ CHANGED: Empty string (was 'Medium')
     description: '',
     isAnonymous: false,
   });
   const [images, setImages] = useState([]);
   const [pdf, setPdf] = useState(null);
   const [errors, setErrors] = useState({});
+  const [touched, setTouched] = useState({});
   const [dragActive, setDragActive] = useState(false);
 
-  // Category icons mapping
+  // Category icons
   const categoryIcons = {
     Fan: '🌀',
     Light: '💡',
@@ -56,80 +56,117 @@ const SubmitComplaint = () => {
   // Priority colors
   const priorityColors = {
     Low: 'bg-green-100 text-green-700 border-green-300 dark:bg-green-900/30 dark:text-green-400 dark:border-green-700',
-    Medium:
-      'bg-yellow-100 text-yellow-700 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-700',
+    Medium: 'bg-yellow-100 text-yellow-700 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-700',
     High: 'bg-red-100 text-red-700 border-red-300 dark:bg-red-900/30 dark:text-red-400 dark:border-red-700',
   };
 
-  // Calculate form completion percentage
-  const calculateProgress = () => {
-    let completed = 0;
-    if (formData.subject.length >= 5) completed += 16.66;
-    if (formData.category) completed += 16.66;
-    if (formData.location.length >= 5) completed += 16.66;
-    if (formData.priority) completed += 16.66;
-    if (formData.description.length >= 20) completed += 16.66;
-    if (images.length > 0 || pdf) completed += 16.66;
-    return Math.round(completed);
-  };
+// src/pages/SubmitComplaint.jsx - FIXED PROGRESS CALCULATION
 
+// ✅ CHANGED: Progress calculation (images/PDF are OPTIONAL)
+const calculateProgress = () => {
+  let completed = 0;
+  const total = 5; // ✅ Changed from 6 to 5 (removed attachments from required)
+
+  // Required fields only (5 fields = 20% each)
+  if (formData.subject.trim().length >= 5) completed++;
+  if (formData.category) completed++;
+  if (formData.location.trim().length >= 5) completed++;
+  if (formData.priority) completed++;
+  if (formData.description.trim().length >= 20) completed++;
+  
+  // ✅ REMOVED: Images/PDF from progress calculation
+  // if (images.length > 0 || pdf) completed++;
+
+  return Math.round((completed / total) * 100);
+};
   const progress = calculateProgress();
+
+  // Validation
+  const validateField = (name, value) => {
+    switch (name) {
+      case 'subject':
+        if (!value.trim()) return 'Subject is required';
+        if (value.length < 5) return 'Subject must be at least 5 characters';
+        if (value.length > 100) return 'Subject must not exceed 100 characters';
+        return '';
+
+      case 'category':
+        if (!value) return 'Please select a category';
+        return '';
+
+      case 'location':
+        if (!value.trim()) return 'Location is required';
+        if (value.length < 5) return 'Location must be at least 5 characters';
+        return '';
+
+      case 'priority':
+        if (!value) return 'Please select a priority'; // ✅ Added validation
+        return '';
+
+      case 'description':
+        if (!value.trim()) return 'Description is required';
+        if (value.length < 20) return 'Description must be at least 20 characters';
+        if (value.length > 500) return 'Description must not exceed 500 characters';
+        return '';
+
+      default:
+        return '';
+    }
+  };
 
   // Handle input change
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
-    if (errors[name]) {
-      setErrors((prev) => ({ ...prev, [name]: '' }));
+    const newValue = type === 'checkbox' ? checked : value;
+
+    setFormData((prev) => ({ ...prev, [name]: newValue }));
+    setTouched((prev) => ({ ...prev, [name]: true }));
+
+    if (name !== 'isAnonymous') {
+      const error = validateField(name, newValue);
+      setErrors((prev) => ({ ...prev, [name]: error }));
     }
   };
 
-  // Handle category selection
+  const handleBlur = (e) => {
+    const { name, value } = e.target;
+    setTouched((prev) => ({ ...prev, [name]: true }));
+    const error = validateField(name, value);
+    setErrors((prev) => ({ ...prev, [name]: error }));
+  };
+
   const handleCategorySelect = (category) => {
     setFormData((prev) => ({ ...prev, category }));
-    if (errors.category) {
-      setErrors((prev) => ({ ...prev, category: '' }));
-    }
+    setTouched((prev) => ({ ...prev, category: true }));
+    const error = validateField('category', category);
+    setErrors((prev) => ({ ...prev, category: error }));
   };
 
-  // Handle priority selection – 
   const handlePrioritySelect = (priority) => {
     setFormData((prev) => ({ ...prev, priority }));
+    setTouched((prev) => ({ ...prev, priority: true }));
+    const error = validateField('priority', priority);
+    setErrors((prev) => ({ ...prev, priority: error }));
   };
 
-  // Validate form
-  const validate = () => {
+  // Validate all
+  const validateAll = () => {
     const newErrors = {};
+    newErrors.subject = validateField('subject', formData.subject);
+    newErrors.category = validateField('category', formData.category);
+    newErrors.location = validateField('location', formData.location);
+    newErrors.priority = validateField('priority', formData.priority); // ✅ Added
+    newErrors.description = validateField('description', formData.description);
 
-    if (!formData.subject.trim()) {
-      newErrors.subject = 'Subject is required';
-    } else if (formData.subject.length < 5) {
-      newErrors.subject = 'Subject must be at least 5 characters';
-    } else if (formData.subject.length > 100) {
-      newErrors.subject = 'Subject must not exceed 100 characters';
-    }
+    const filteredErrors = Object.fromEntries(
+      Object.entries(newErrors).filter(([_, v]) => v)
+    );
 
-    if (!formData.category) newErrors.category = 'Please select a category';
-
-    if (!formData.location.trim()) {
-      newErrors.location = 'Location is required';
-    } else if (formData.location.length < 5) {
-      newErrors.location = 'Location must be at least 5 characters';
-    }
-
-    if (!formData.description.trim()) {
-      newErrors.description = 'Description is required';
-    } else if (formData.description.length < 20) {
-      newErrors.description = 'Description must be at least 20 characters';
-    } else if (formData.description.length > 500) {
-      newErrors.description = 'Description must not exceed 500 characters';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    setErrors(filteredErrors);
+    return Object.keys(filteredErrors).length === 0;
   };
 
-  // Handle drag events
+  // Drag handlers
   const handleDrag = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -140,7 +177,6 @@ const SubmitComplaint = () => {
     }
   };
 
-  // Handle drop
   const handleDrop = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -149,7 +185,6 @@ const SubmitComplaint = () => {
     handleImageFiles(files);
   };
 
-  // Handle image files - store actual file object
   const handleImageFiles = (files) => {
     if (images.length + files.length > 3) {
       showError('Maximum 3 images allowed');
@@ -158,11 +193,11 @@ const SubmitComplaint = () => {
 
     const validFiles = files.filter((file) => {
       if (!['image/jpeg', 'image/jpg', 'image/png'].includes(file.type)) {
-        showError(`${file.name} is not a valid image (only JPG/PNG allowed)`);
+        showError(`${file.name} is not valid (JPG/PNG only)`);
         return false;
       }
       if (file.size > 2 * 1024 * 1024) {
-        showError(`${file.name} exceeds 2MB limit`);
+        showError(`${file.name} exceeds 2MB`);
         return false;
       }
       return true;
@@ -177,7 +212,6 @@ const SubmitComplaint = () => {
     setImages((prev) => [...prev, ...newImages]);
   };
 
-  // Remove image
   const removeImage = (index) => {
     setImages((prev) => {
       const newImages = [...prev];
@@ -187,33 +221,34 @@ const SubmitComplaint = () => {
     });
   };
 
-  // Handle PDF upload
   const handlePdfChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
     if (file.type !== 'application/pdf') {
-      showError('Only PDF files are allowed');
+      showError('Only PDF files allowed');
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      showError('PDF file must not exceed 5MB');
+      showError('PDF must not exceed 5MB');
       return;
     }
     setPdf(file);
   };
 
-  // Remove PDF
-  const removePdf = () => {
-    setPdf(null);
-  };
+  const removePdf = () => setPdf(null);
 
-  // Handle submit with FormData
+  useEffect(() => {
+    return () => {
+      images.forEach((img) => URL.revokeObjectURL(img.preview));
+    };
+  }, []);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!validate()) {
-      showError('Please fix the errors before submitting');
+    if (!validateAll()) {
+      showError('Please fix all errors before submitting');
       return;
     }
 
@@ -221,35 +256,29 @@ const SubmitComplaint = () => {
 
     try {
       const token = localStorage.getItem('token');
-
       const submitData = new FormData();
-      submitData.append('subject', formData.subject);
+
+      submitData.append('subject', formData.subject.trim());
       submitData.append('category', formData.category);
-      submitData.append('location', formData.location);
-      submitData.append('priority', formData.priority);
-      submitData.append('description', formData.description);
+      submitData.append('location', formData.location.trim());
+      submitData.append('priority', formData.priority); // ✅ Now required
+      submitData.append('description', formData.description.trim());
       submitData.append('isAnonymous', formData.isAnonymous);
 
-      images.forEach((img) => {
-        submitData.append('images', img.file);
-      });
-
-      if (pdf) {
-        submitData.append('pdfDocument', pdf);
-      }
+      images.forEach((img) => submitData.append('images', img.file));
+      if (pdf) submitData.append('pdfDocument', pdf);
 
       const response = await api.submitComplaint(submitData, token);
-      success(`Complaint ${response.id || response.complaint?.complaintId || ''} submitted successfully!`);
-      setTimeout(() => navigate('/user/dashboard'), 1000);
+      success(`Complaint submitted successfully! ID: ${response.complaint?.complaintId || ''}`);
+      setTimeout(() => navigate('/user/my-complaints'), 1500);
     } catch (err) {
       console.error('Submit error:', err);
-      showError(err.response?.data?.message || 'Failed to submit complaint. Please try again.');
+      showError(err.response?.data?.message || 'Failed to submit. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Character counter color
   const getCounterColor = (current, max) => {
     const percentage = (current / max) * 100;
     if (percentage < 50) return 'text-green-600 dark:text-green-400';
@@ -257,71 +286,79 @@ const SubmitComplaint = () => {
     return 'text-red-600 dark:text-red-400';
   };
 
+  const getFieldStatus = (fieldName) => {
+    if (!touched[fieldName]) return null;
+    if (errors[fieldName]) {
+      return <RiErrorWarningLine className="h-5 w-5 text-red-500" />;
+    }
+    if (formData[fieldName]) {
+      return <RiCheckLine className="h-5 w-5 text-green-500" />;
+    }
+    return null;
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 p-4 sm:p-6 lg:p-8">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 sm:p-6 lg:p-8 pb-24 md:pb-8">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
-        <div className="mb-6 sm:mb-8 animate-fadeIn">
+        <div className="mb-6 animate-fadeIn">
           <button
             onClick={() => navigate(-1)}
-            className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 mb-4 transition-colors group"
+            className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 mb-4 transition-all group"
           >
             <RiArrowLeftLine className="h-5 w-5 group-hover:-translate-x-1 transition-transform" />
-            <span className="text-sm sm:text-base font-semibold">Back</span>
+            <span className="font-semibold">Back</span>
           </button>
-          <div className="mb-4">
-            <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-800 dark:text-gray-200 mb-2">
-              Submit New Complaint
-            </h1>
-            <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400">
-              Fill out the form below to report an issue on campus
-            </p>
-          </div>
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-gray-800 dark:text-gray-200 mb-2">
+            Submit New Complaint
+          </h1>
+          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400">
+            Fill out the form below to report an issue
+          </p>
         </div>
 
-        {/* Sticky Progress Bar */}
-        <div className="sticky top-16 z-40 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-4 bg-gradient-to-r from-white/95 to-gray-50/95 dark:from-gray-900/95 dark:to-gray-800/95 backdrop-blur-md border-b border-gray-200 dark:border-gray-700 shadow-lg mb-6">
+        {/* Progress Bar */}
+        <div className="sticky top-16 md:top-16 z-40 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-4 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-b border-gray-200 dark:border-gray-700 shadow-sm mb-6">
           <div className="max-w-4xl mx-auto">
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3 sm:gap-4">
               <div className="flex-1">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300">Form Progress</p>
+                  <p className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300">
+                    Form Progress
+                  </p>
                   <p className="text-xs sm:text-sm font-bold text-indigo-600 dark:text-indigo-400">
                     {progress}%
                   </p>
                 </div>
                 <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
                   <div
-                    className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 transition-all duration-500 ease-out rounded-full relative"
+                    className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-500 ease-out rounded-full"
                     style={{ width: `${progress}%` }}
-                  >
-                    <div className="absolute inset-0 bg-white/30 animate-pulse"></div>
-                  </div>
+                  />
                 </div>
               </div>
-              {progress >= 100 && (
-                <div className="flex-shrink-0 flex items-center gap-2 px-3 py-1.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full animate-scaleIn">
+              {progress === 100 && (
+                <div className="flex-shrink-0 flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full text-xs font-bold">
                   <RiCheckLine className="h-4 w-4" />
-                  <span className="text-xs font-bold hidden sm:inline">Ready to Submit!</span>
+                  <span className="hidden sm:inline">Ready!</span>
                 </div>
               )}
             </div>
           </div>
         </div>
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Basic Information Card */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden animate-scaleIn">
-            <div className="bg-gradient-to-r from-indigo-500 to-purple-600 px-6 py-4">
-              <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                <RiFileTextLine className="h-6 w-6" />
+          {/* Basic Info Card */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-4 sm:px-6 py-3 sm:py-4">
+              <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
+                <RiFileTextLine className="h-5 w-5 sm:h-6 sm:w-6" />
                 Basic Information
               </h2>
             </div>
-            <div className="p-6 space-y-6">
+            <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
               {/* Subject */}
-              <div className="relative">
+              <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                   Subject <span className="text-red-500">*</span>
                 </label>
@@ -331,23 +368,24 @@ const SubmitComplaint = () => {
                     name="subject"
                     value={formData.subject}
                     onChange={handleChange}
+                    onBlur={handleBlur}
                     maxLength={100}
                     placeholder="Brief description of the issue"
-                    className={`w-full px-4 py-3 pr-16 rounded-lg border-2 ${
-                      errors.subject
+                    className={`w-full px-4 py-2.5 sm:py-3 pr-12 rounded-lg border-2 transition-all ${
+                      touched.subject && errors.subject
                         ? 'border-red-500 focus:ring-red-500'
-                        : formData.subject.length >= 5
+                        : touched.subject && formData.subject.length >= 5
                         ? 'border-green-500 focus:ring-green-500'
                         : 'border-gray-300 dark:border-gray-600 focus:ring-indigo-500'
-                    } bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 transition-all`}
+                    } bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2`}
                   />
-                  {formData.subject.length >= 5 && !errors.subject && (
-                    <RiCheckLine className="absolute right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-green-500 animate-scaleIn" />
-                  )}
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    {getFieldStatus('subject')}
+                  </div>
                 </div>
                 <div className="flex justify-between items-center mt-2">
-                  {errors.subject && (
-                    <p className="text-sm text-red-500 flex items-center gap-1 animate-slideDown">
+                  {touched.subject && errors.subject && (
+                    <p className="text-xs sm:text-sm text-red-500 flex items-center gap-1">
                       <RiErrorWarningLine className="h-4 w-4" />
                       {errors.subject}
                     </p>
@@ -358,38 +396,36 @@ const SubmitComplaint = () => {
                 </div>
               </div>
 
-              {/* Category Selection */}
+              {/* Category */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
                   Category <span className="text-red-500">*</span>
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
                   {CATEGORIES.map((cat) => (
                     <button
                       key={cat}
                       type="button"
                       onClick={() => handleCategorySelect(cat)}
-                      className={`p-4 rounded-xl border-2 transition-all duration-300 ${
+                      className={`p-3 sm:p-4 rounded-xl border-2 transition-all ${
                         formData.category === cat
-                          ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 shadow-lg scale-105'
-                          : 'border-gray-300 dark:border-gray-600 hover:border-indigo-400 hover:shadow-md'
+                          ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 shadow-md scale-105'
+                          : 'border-gray-300 dark:border-gray-600 hover:border-indigo-400'
                       }`}
                     >
-                      <div className="text-3xl mb-2">{categoryIcons[cat]}</div>
-                      <p
-                        className={`text-sm font-semibold ${
-                          formData.category === cat
-                            ? 'text-indigo-600 dark:text-indigo-400'
-                            : 'text-gray-700 dark:text-gray-300'
-                        }`}
-                      >
+                      <div className="text-2xl sm:text-3xl mb-1 sm:mb-2">{categoryIcons[cat]}</div>
+                      <p className={`text-xs sm:text-sm font-semibold ${
+                        formData.category === cat
+                          ? 'text-indigo-600 dark:text-indigo-400'
+                          : 'text-gray-700 dark:text-gray-300'
+                      }`}>
                         {cat}
                       </p>
                     </button>
                   ))}
                 </div>
-                {errors.category && (
-                  <p className="text-sm text-red-500 flex items-center gap-1 mt-2 animate-slideDown">
+                {touched.category && errors.category && (
+                  <p className="text-xs sm:text-sm text-red-500 flex items-center gap-1 mt-2">
                     <RiErrorWarningLine className="h-4 w-4" />
                     {errors.category}
                   </p>
@@ -402,50 +438,62 @@ const SubmitComplaint = () => {
                   <RiMapPinLine className="inline h-4 w-4 mr-1" />
                   Location <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="text"
-                  name="location"
-                  value={formData.location}
-                  onChange={handleChange}
-                  placeholder="e.g., Room 301, Block A"
-                  className={`w-full px-4 py-3 rounded-lg border-2 ${
-                    errors.location
-                      ? 'border-red-500 focus:ring-red-500'
-                      : formData.location.length >= 5
-                      ? 'border-green-500 focus:ring-green-500'
-                      : 'border-gray-300 dark:border-gray-600 focus:ring-indigo-500'
-                  } bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 transition-all`}
-                />
-                {errors.location && (
-                  <p className="text-sm text-red-500 flex items-center gap-1 mt-2 animate-slideDown">
+                <div className="relative">
+                  <input
+                    type="text"
+                    name="location"
+                    value={formData.location}
+                    onChange={handleChange}
+                    onBlur={handleBlur}
+                    placeholder="e.g., Room 301, Block A"
+                    className={`w-full px-4 py-2.5 sm:py-3 pr-12 rounded-lg border-2 transition-all ${
+                      touched.location && errors.location
+                        ? 'border-red-500 focus:ring-red-500'
+                        : touched.location && formData.location.length >= 5
+                        ? 'border-green-500 focus:ring-green-500'
+                        : 'border-gray-300 dark:border-gray-600 focus:ring-indigo-500'
+                    } bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2`}
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    {getFieldStatus('location')}
+                  </div>
+                </div>
+                {touched.location && errors.location && (
+                  <p className="text-xs sm:text-sm text-red-500 flex items-center gap-1 mt-2">
                     <RiErrorWarningLine className="h-4 w-4" />
                     {errors.location}
                   </p>
                 )}
               </div>
 
-              {/* Priority – 3 buttons */}
+              {/* Priority - ✅ FIXED: No default selection */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
                   <RiFlagLine className="inline h-4 w-4 mr-1" />
                   Priority <span className="text-red-500">*</span>
                 </label>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-3 gap-2 sm:gap-3">
                   {PRIORITIES.map((priority) => (
                     <button
                       key={priority}
                       type="button"
                       onClick={() => handlePrioritySelect(priority)}
-                      className={`px-4 py-3 rounded-lg border-2 font-semibold transition-all duration-300 ${
+                      className={`px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg border-2 font-semibold text-sm sm:text-base transition-all ${
                         formData.priority === priority
-                          ? `${priorityColors[priority]} border-current shadow-lg scale-105`
-                          : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:shadow-md'
+                          ? `${priorityColors[priority]} shadow-md scale-105`
+                          : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-gray-400'
                       }`}
                     >
                       {priority}
                     </button>
                   ))}
                 </div>
+                {touched.priority && errors.priority && (
+                  <p className="text-xs sm:text-sm text-red-500 flex items-center gap-1 mt-2">
+                    <RiErrorWarningLine className="h-4 w-4" />
+                    {errors.priority}
+                  </p>
+                )}
               </div>
 
               {/* Description */}
@@ -457,30 +505,26 @@ const SubmitComplaint = () => {
                   name="description"
                   value={formData.description}
                   onChange={handleChange}
+                  onBlur={handleBlur}
                   maxLength={500}
-                  rows={5}
-                  placeholder="Provide detailed description of the issue..."
-                  className={`w-full px-4 py-3 rounded-lg border-2 ${
-                    errors.description
+                  rows={4}
+                  placeholder="Provide detailed description..."
+                  className={`w-full px-4 py-3 rounded-lg border-2 transition-all resize-none ${
+                    touched.description && errors.description
                       ? 'border-red-500 focus:ring-red-500'
-                      : formData.description.length >= 20
+                      : touched.description && formData.description.length >= 20
                       ? 'border-green-500 focus:ring-green-500'
                       : 'border-gray-300 dark:border-gray-600 focus:ring-indigo-500'
-                  } bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 transition-all resize-none`}
+                  } bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2`}
                 />
                 <div className="flex justify-between items-center mt-2">
-                  {errors.description && (
-                    <p className="text-sm text-red-500 flex items-center gap-1 animate-slideDown">
+                  {touched.description && errors.description && (
+                    <p className="text-xs sm:text-sm text-red-500 flex items-center gap-1">
                       <RiErrorWarningLine className="h-4 w-4" />
                       {errors.description}
                     </p>
                   )}
-                  <p
-                    className={`text-xs ml-auto font-semibold ${getCounterColor(
-                      formData.description.length,
-                      500
-                    )}`}
-                  >
+                  <p className={`text-xs ml-auto font-semibold ${getCounterColor(formData.description.length, 500)}`}>
                     {formData.description.length}/500
                   </p>
                 </div>
@@ -488,23 +532,20 @@ const SubmitComplaint = () => {
             </div>
           </div>
 
-          {/* Attachments Card */}
-          <div
-            className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden animate-scaleIn"
-            style={{ animationDelay: '0.1s' }}
-          >
-            <div className="bg-gradient-to-r from-purple-500 to-pink-600 px-6 py-4">
-              <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                <RiUploadCloudLine className="h-6 w-6" />
+          {/* Attachments Card - (Keep same as before) */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="bg-gradient-to-r from-purple-600 to-pink-600 px-4 sm:px-6 py-3 sm:py-4">
+              <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
+                <RiUploadCloudLine className="h-5 w-5 sm:h-6 sm:w-6" />
                 Attachments (Optional)
               </h2>
             </div>
-            <div className="p-6 space-y-6">
-              {/* Image Upload */}
+            <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+              {/* Images */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
                   <RiImageAddLine className="inline h-4 w-4 mr-1" />
-                  Upload Images (Max 3, 2MB each)
+                  Images (Max 3, 2MB each)
                 </label>
                 {images.length < 3 && (
                   <div
@@ -512,9 +553,9 @@ const SubmitComplaint = () => {
                     onDragLeave={handleDrag}
                     onDragOver={handleDrag}
                     onDrop={handleDrop}
-                    className={`relative border-2 border-dashed rounded-xl p-8 transition-all duration-300 ${
+                    className={`relative border-2 border-dashed rounded-xl p-6 sm:p-8 transition-all ${
                       dragActive
-                        ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-900/20 scale-105'
+                        ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-900/20'
                         : 'border-gray-300 dark:border-gray-600 hover:border-indigo-400'
                     }`}
                   >
@@ -526,58 +567,49 @@ const SubmitComplaint = () => {
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     />
                     <div className="text-center">
-                      <RiUploadCloudLine
-                        className={`h-12 w-12 mx-auto mb-3 ${
-                          dragActive ? 'text-indigo-600 animate-bounce' : 'text-gray-400'
-                        }`}
-                      />
+                      <RiUploadCloudLine className={`h-10 w-10 sm:h-12 sm:w-12 mx-auto mb-2 sm:mb-3 ${
+                        dragActive ? 'text-indigo-600 animate-bounce' : 'text-gray-400'
+                      }`} />
                       <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                        {dragActive ? 'Drop images here' : 'Drag & drop images here'}
+                        {dragActive ? 'Drop here' : 'Drag & drop or click'}
                       </p>
                       <p className="text-xs text-gray-500 dark:text-gray-400">
-                        or click to browse ({images.length}/3)
+                        {images.length}/3 uploaded
                       </p>
                     </div>
                   </div>
                 )}
 
-                {/* Image Previews */}
                 {images.length > 0 && (
-                  <div className="grid grid-cols-3 gap-4 mt-4">
+                  <div className="grid grid-cols-3 gap-3 sm:gap-4 mt-4">
                     {images.map((image, index) => (
-                      <div
-                        key={index}
-                        className="relative group aspect-square bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden border-2 border-gray-200 dark:border-gray-600 hover:border-indigo-500 transition-all"
-                      >
+                      <div key={index} className="relative group aspect-square bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden border-2 border-gray-200 dark:border-gray-600">
                         <img
                           src={image.preview}
                           alt={`Upload ${index + 1}`}
-                          className="w-full h-full object-cover transition-transform group-hover:scale-110"
+                          className="w-full h-full object-cover"
                         />
                         <button
                           type="button"
                           onClick={() => removeImage(index)}
-                          className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all hover:bg-red-600 hover:scale-110"
+                          className="absolute top-1 right-1 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
                         >
                           <RiCloseLine className="h-4 w-4" />
                         </button>
-                        <div className="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm p-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <p className="text-xs text-white truncate">{image.name}</p>
-                        </div>
                       </div>
                     ))}
                   </div>
                 )}
               </div>
 
-              {/* PDF Upload */}
+              {/* PDF */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
                   <RiFilePdfLine className="inline h-4 w-4 mr-1" />
-                  Verification Document (PDF only, Max 5MB)
+                  Document (PDF, Max 5MB)
                 </label>
                 {!pdf ? (
-                  <label className="block border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-6 hover:border-indigo-400 transition-all cursor-pointer group">
+                  <label className="block border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-6 hover:border-indigo-400 transition-all cursor-pointer">
                     <input
                       type="file"
                       accept="application/pdf"
@@ -585,17 +617,15 @@ const SubmitComplaint = () => {
                       className="hidden"
                     />
                     <div className="text-center">
-                      <RiFilePdfLine className="h-10 w-10 mx-auto mb-2 text-gray-400 group-hover:text-red-500 transition-colors" />
+                      <RiFilePdfLine className="h-10 w-10 mx-auto mb-2 text-gray-400" />
                       <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
                         Click to upload PDF
                       </p>
                     </div>
                   </label>
                 ) : (
-                  <div className="flex items-center gap-3 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border-2 border-red-200 dark:border-red-800 group hover:shadow-md transition-all">
-                    <div className="flex-shrink-0 p-3 bg-red-100 dark:bg-red-900/30 rounded-lg">
-                      <RiFilePdfLine className="h-6 w-6 text-red-600 dark:text-red-400" />
-                    </div>
+                  <div className="flex items-center gap-3 p-3 sm:p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border-2 border-red-200 dark:border-red-800">
+                    <RiFilePdfLine className="h-8 w-8 text-red-600 dark:text-red-400 flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate">
                         {pdf.name}
@@ -607,7 +637,7 @@ const SubmitComplaint = () => {
                     <button
                       type="button"
                       onClick={removePdf}
-                      className="flex-shrink-0 p-2 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                      className="p-2 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors flex-shrink-0"
                     >
                       <RiCloseLine className="h-5 w-5" />
                     </button>
@@ -617,52 +647,44 @@ const SubmitComplaint = () => {
             </div>
           </div>
 
-          {/* Privacy Card */}
-          <div
-            className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden animate-scaleIn"
-            style={{ animationDelay: '0.2s' }}
-          >
-            <div className="p-6">
-              <label className="flex items-start gap-4 cursor-pointer group">
-                <input
-                  type="checkbox"
-                  name="isAnonymous"
-                  checked={formData.isAnonymous}
-                  onChange={handleChange}
-                  className="w-5 h-5 mt-1 rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500 focus:ring-2 cursor-pointer transition-all"
-                />
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <RiEyeOffLine className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
-                    <span className="text-base font-bold text-gray-800 dark:text-gray-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                      Submit Anonymously
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Your identity will be hidden from public view. Admins will still see your details for verification.
-                  </p>
+          {/* Privacy */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
+            <label className="flex items-start gap-3 sm:gap-4 cursor-pointer group">
+              <input
+                type="checkbox"
+                name="isAnonymous"
+                checked={formData.isAnonymous}
+                onChange={handleChange}
+                className="w-5 h-5 mt-0.5 rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+              />
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <RiEyeOffLine className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                  <span className="text-sm sm:text-base font-bold text-gray-800 dark:text-gray-200">
+                    Submit Anonymously
+                  </span>
                 </div>
-              </label>
-            </div>
+                <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+                  Your identity will be hidden from public view
+                </p>
+              </div>
+            </label>
           </div>
 
-          {/* Submit Buttons */}
-          <div
-            className="flex flex-col sm:flex-row gap-4 animate-scaleIn"
-            style={{ animationDelay: '0.3s' }}
-          >
+          {/* Buttons */}
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
             <button
               type="button"
               onClick={() => navigate(-1)}
               disabled={loading}
-              className="w-full sm:w-auto px-8 py-4 border-2 border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 font-bold hover:bg-gray-100 dark:hover:bg-gray-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105"
+              className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 border-2 border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 font-bold hover:bg-gray-100 dark:hover:bg-gray-700 transition-all disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={loading || progress < 83}
-              className="w-full sm:flex-1 flex items-center justify-center gap-3 px-8 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-2xl hover:scale-105 relative overflow-hidden group"
+              disabled={loading || progress < 100}
+              className="w-full sm:flex-1 flex items-center justify-center gap-2 sm:gap-3 px-6 sm:px-8 py-3 sm:py-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
             >
               {loading ? (
                 <>
@@ -671,12 +693,9 @@ const SubmitComplaint = () => {
                 </>
               ) : (
                 <>
-                  <RiSendPlaneFill className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                  <RiSendPlaneFill className="h-5 w-5" />
                   <span>Submit Complaint</span>
                 </>
-              )}
-              {progress >= 83 && !loading && (
-                <span className="absolute inset-0 bg-white/20 animate-pulse"></span>
               )}
             </button>
           </div>

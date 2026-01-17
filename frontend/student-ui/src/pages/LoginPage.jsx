@@ -3,9 +3,9 @@ import { Link } from "react-router-dom";
 import { loginApi } from "../api.js";
 
 const ADMIN_APP_URL =
-  import.meta.env.VITE_ADMIN_APP_URL || "http://localhost:5173";
+  import.meta.env.VITE_ADMIN_URL || "http://localhost:5173";
 const USER_APP_URL =
-  import.meta.env.VITE_USER_APP_URL || "http://localhost:3001";
+  import.meta.env.VITE_STUDENT_URL || "http://localhost:3001";
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:4000/api";
 
 export default function LoginPage() {

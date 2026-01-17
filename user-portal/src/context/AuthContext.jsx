@@ -1,3 +1,5 @@
+// user-portal/src/context/AuthContext.jsx - FIXED LOGOUT
+
 import React, { createContext, useState, useEffect } from "react";
 
 export const AuthContext = createContext(null);
@@ -100,13 +102,21 @@ export default function AuthProvider({ children }) {
     setIsAuthenticated(true);
   }
 
+  // ✅ FIXED LOGOUT - Clear everything and prevent back navigation
   function logout() {
+    // Clear all storage
     localStorage.removeItem("token");
     localStorage.removeItem("refreshToken");
     localStorage.removeItem("user");
+    sessionStorage.clear(); // ✅ Clear session storage too
+    
+    // Reset state
     setUser(null);
     setIsAuthenticated(false);
-    window.location.href = "https://ccms-home.vercel.app/";
+
+    // ✅ CRITICAL: Use window.location.replace() instead of href
+    // This replaces current history entry, preventing back navigation
+    window.location.replace("https://landing-test-liard-one.vercel.app/login");
   }
 
   function updateUser(updates) {

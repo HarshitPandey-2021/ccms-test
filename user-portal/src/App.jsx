@@ -1,20 +1,33 @@
-// src/App.jsx (user portal - 3001)
-import React, { useContext } from "react";
-import { Routes, Route } from "react-router-dom";
+// user-portal/src/App.jsx - ADD AUTH CHECK ON ROUTE CHANGE
+
+import React, { useContext, useEffect } from "react";
+import { Routes, Route, useNavigate } from "react-router-dom";
 import Layout from "./components/layout/Layout";
 import Dashboard from "./pages/Dashboard";
 import SubmitComplaint from "./pages/SubmitComplaint";
 import MyComplaints from "./pages/MyComplaints";
 import ComplaintDetails from "./pages/ComplaintDetails";
 import Profile from "./pages/Profile";
-import ToastTest from "./pages/ToastTest";
 import EditComplaint from "./pages/EditComplaint";
 import { AuthContext } from "./context/AuthContext";
 import "./index.css";
 
-// Simple protected route based on AuthContext
+// ✅ ENHANCED Protected Route with Navigation Block
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated } = useContext(AuthContext);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    // ✅ Check auth on every route change
+    if (!isAuthenticated) {
+      // Clear any remaining data
+      localStorage.clear();
+      sessionStorage.clear();
+      
+      // Redirect to login
+      window.location.replace("https://landing-test-liard-one.vercel.app/login");
+    }
+  }, [isAuthenticated]);
 
   if (!isAuthenticated) {
     return (
@@ -27,7 +40,7 @@ const ProtectedRoute = ({ children }) => {
             Your session has expired or you are not logged in.
           </p>
           <a
-            href="https://ccms-home.vercel.app/"
+            href="https://landing-test-liard-one.vercel.app/login"
             className="inline-flex items-center px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-500 text-sm font-medium"
           >
             Go to Login Portal
@@ -100,15 +113,6 @@ export default function App() {
             </ProtectedRoute>
           }
         />
-        <Route
-          path="/toast-test"
-          element={
-            <ProtectedRoute>
-              <ToastTest />
-            </ProtectedRoute>
-          }
-        />
-        {/* Fallback route */}
         <Route
           path="*"
           element={

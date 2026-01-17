@@ -1,8 +1,8 @@
-// src/pages/Complaints.jsx
+// src/pages/Complaints.jsx - Mobile Responsive
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import ComplaintFilters from "../components/ComplaintFilters";
-import ComplaintTable from "../components/ComplaintTable/ComplaintTable";
+import ComplaintTable from "../components/complaintTable/ComplaintTable";
 import ComplaintDetails from "../components/ComplaintDetails";
 import Loading from "../components/Loading";
 import EmptyState from "../components/EmptyState";
@@ -17,6 +17,8 @@ import {
   RiDownloadLine,
   RiPrinterLine,
   RiCloseLine,
+  RiFilterLine,
+  RiRefreshLine,
 } from "react-icons/ri";
 import { exportToCSV, exportToPrint } from "../utils/exportUtils";
 import { logActivity, ACTIVITY_TYPES } from "../services/activityLogger";
@@ -25,7 +27,10 @@ const Complaints = () => {
   const location = useLocation();
   const { success, error } = useToast();
 
-  // Initialize filters from URL state or defaults
+  // Mobile filter toggle
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
+
+  // Initialize filters
   const initialFilters = useMemo(() => {
     if (location.state?.filterStatus) {
       const filterValue = location.state.filterStatus;
@@ -40,25 +45,24 @@ const Complaints = () => {
     return { status: "", search: "", dateRange: "all", priority: "" };
   }, [location.state]);
 
-  // State management
   const [complaints, setComplaints] = useState([]);
   const [filteredComplaints, setFilteredComplaints] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filters, setFilters] = useState(initialFilters);
   const [selectedComplaint, setSelectedComplaint] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isEditMode, setIsEditMode] = useState(false); // ✅ NEW: Track edit mode
+  const [isEditMode, setIsEditMode] = useState(false);
   const [filterHighlight, setFilterHighlight] = useState(
     !!location.state?.filterStatus
   );
+  const [refreshing, setRefreshing] = useState(false);
 
   const token = getAdminToken() || localStorage.getItem("token");
 
-  // Apply filters to complaints list
+  // Apply filters
   const applyFilters = useCallback((complaintsToFilter, currentFilters) => {
     let filtered = [...complaintsToFilter];
 
-    // Filter by status
     if (currentFilters.status && currentFilters.status !== "All") {
       filtered = filtered.filter(
         (c) =>
@@ -66,7 +70,6 @@ const Complaints = () => {
       );
     }
 
-    // Filter by priority
     if (currentFilters.priority && currentFilters.priority !== "all") {
       const target = currentFilters.priority.toLowerCase();
       filtered = filtered.filter((c) => {
@@ -78,7 +81,6 @@ const Complaints = () => {
       });
     }
 
-    // Filter by search term
     if (currentFilters.search && currentFilters.search.trim() !== "") {
       const term = currentFilters.search.toLowerCase();
       filtered = filtered.filter((c) => {
@@ -95,7 +97,6 @@ const Complaints = () => {
       });
     }
 
-    // Filter by date range
     if (currentFilters.dateRange && currentFilters.dateRange !== "all") {
       const now = new Date();
       let threshold = new Date();
@@ -128,69 +129,65 @@ const Complaints = () => {
     setFilteredComplaints(filtered);
   }, []);
 
-  // Fetch all complaints from backend
-  useEffect(() => {
-    const fetchComplaints = async () => {
-      try {
-        setIsLoading(true);
+  // Fetch complaints
+  const fetchComplaints = useCallback(async () => {
+    try {
+      setIsLoading(true);
 
-        if (!token) {
-          error("❌ No authentication token found");
-          setIsLoading(false);
-          return;
-        }
+      if (!token) {
+        error("❌ No authentication token found");
+        setIsLoading(false);
+        return;
+      }
 
-        const response = await getAllComplaints(); //token parameter removed
-        console.log("📦 Complaints fetched:", response?.length || 0);
+      const response = await getAllComplaints();
+      console.log("📦 Complaints fetched:", response?.length || 0);
 
-        if (!Array.isArray(response)) {
-          console.error("Response is not an array:", response);
-          setComplaints([]);
-          setFilteredComplaints([]);
-          setIsLoading(false);
-          return;
-        }
-
-        setComplaints(response);
-        applyFilters(response, initialFilters);
-      } catch (err) {
-        console.error("Error fetching complaints:", err);
-        error("❌ Failed to fetch complaints from the server.");
+      if (!Array.isArray(response)) {
+        console.error("Response is not an array:", response);
         setComplaints([]);
         setFilteredComplaints([]);
-      } finally {
         setIsLoading(false);
+        return;
       }
-    };
 
-    if (token) {
-      fetchComplaints();
+      setComplaints(response);
+      applyFilters(response, initialFilters);
+    } catch (err) {
+      console.error("Error fetching complaints:", err);
+      error("❌ Failed to fetch complaints from the server.");
+      setComplaints([]);
+      setFilteredComplaints([]);
+    } finally {
+      setIsLoading(false);
+      setRefreshing(false);
     }
   }, [token, applyFilters, initialFilters, error]);
 
-  // ✅ NEW: Handle notification clicks - Auto-open complaint from URL
+  useEffect(() => {
+    if (token) {
+      fetchComplaints();
+    }
+  }, [token, fetchComplaints]);
+
+  // Auto-open complaint from notification
   useEffect(() => {
     const urlParams = new URLSearchParams(location.search);
     const complaintId = urlParams.get('id');
     
     if (complaintId && complaints.length > 0) {
-      console.log('🔔 Auto-opening complaint from notification:', complaintId);
+      console.log('🔔 Auto-opening complaint:', complaintId);
       
-      // Check if this complaint exists in our list
       const exists = complaints.find(c => c._id === complaintId || c.id === complaintId);
       
       if (exists) {
-        // Auto-open the complaint
         openComplaintDetails(complaintId, false);
-        
-        // Clean the URL (remove ?id= parameter)
         window.history.replaceState({}, '', '/complaints');
       } else {
-        console.warn('Complaint not found in current list:', complaintId);
         error('⚠️ Complaint not found or access denied');
       }
     }
-  }, [complaints, location.search, error]); // Note: openComplaintDetails added in next useEffect
+  }, [complaints, location.search, error]);
 
   // Re-apply filters when they change
   useEffect(() => {
@@ -203,35 +200,36 @@ const Complaints = () => {
       ...prev,
       ...newFilters,
     }));
+    // Auto-close mobile filter on filter change
+    setShowMobileFilters(false);
   }, []);
 
-  // Clear all filters
+  // Clear filters
   const handleClearFilters = useCallback(() => {
     const cleared = { status: "", search: "", dateRange: "all", priority: "" };
     setFilters(cleared);
     setFilterHighlight(false);
     applyFilters(complaints, cleared);
+    setShowMobileFilters(false);
     success("🔄 Filters cleared!");
   }, [applyFilters, complaints, success]);
 
-  // Open complaint details modal (view mode)
+  // Open complaint details
   const openComplaintDetails = useCallback(
     async (complaintId, editMode = false) => {
-      console.log("🎯 openComplaintDetails with ID:", complaintId, "Edit mode:", editMode);
+      console.log("🎯 Opening complaint:", complaintId, "Edit:", editMode);
 
       try {
         if (!complaintId) {
-          console.error("❌ No complaint ID provided");
           error("⚠️ Invalid complaint ID");
           return;
         }
 
-        console.log("🔍 Fetching complaint details for:", complaintId);
-        const complaintDetails = await getComplaintById(complaintId); //token param removed
-        console.log("✅ Complaint details fetched:", complaintDetails);
+        const complaintDetails = await getComplaintById(complaintId);
+        console.log("✅ Complaint details fetched");
 
         setSelectedComplaint(complaintDetails);
-        setIsEditMode(editMode); // ✅ Set edit mode
+        setIsEditMode(editMode);
         setIsModalOpen(true);
 
         logActivity(ACTIVITY_TYPES.COMPLAINT_VIEW, {
@@ -246,34 +244,10 @@ const Complaints = () => {
         error("⚠️ Failed to load complaint details.");
       }
     },
-    [token, error]
+    [error]
   );
 
-  // ✅ Update the auto-open useEffect to include openComplaintDetails dependency
-  useEffect(() => {
-    const urlParams = new URLSearchParams(location.search);
-    const complaintId = urlParams.get('id');
-    
-    if (complaintId && complaints.length > 0 && openComplaintDetails) {
-      console.log('🔔 Auto-opening complaint from notification:', complaintId);
-      
-      // Check if this complaint exists in our list
-      const exists = complaints.find(c => c._id === complaintId || c.id === complaintId);
-      
-      if (exists) {
-        // Auto-open the complaint
-        openComplaintDetails(complaintId, false);
-        
-        // Clean the URL (remove ?id= parameter)
-        window.history.replaceState({}, '', '/complaints');
-      } else {
-        console.warn('Complaint not found in current list:', complaintId);
-        error('⚠️ Complaint not found or access denied');
-      }
-    }
-  }, [complaints, location.search, openComplaintDetails, error]);
-
-  // Handle row click (view mode)
+  // Handle row click
   const handleRowClick = useCallback(
     (complaintId) => {
       openComplaintDetails(complaintId, false);
@@ -281,34 +255,29 @@ const Complaints = () => {
     [openComplaintDetails]
   );
 
-  // ✅ Handle action click from 3-dot menu (view/edit)
+  // Handle action click
   const handleActionClick = useCallback(
     (action, complaint) => {
       if (!complaint?._id) return;
 
       if (action === "view") {
-        openComplaintDetails(complaint._id, false); // View mode
+        openComplaintDetails(complaint._id, false);
       } else if (action === "edit") {
-        openComplaintDetails(complaint._id, true); // Edit mode
+        openComplaintDetails(complaint._id, true);
       }
     },
     [openComplaintDetails]
   );
 
-  // Handle status update from modal
+  // Handle status update
   const handleStatusUpdate = useCallback(
     async (complaintId, newStatus, remarks) => {
-      console.log("📝 handleStatusUpdate called:", {
-        complaintId,
-        newStatus,
-        remarks,
-      });
+      console.log("📝 Updating status:", { complaintId, newStatus, remarks });
 
       try {
         const updateSuccess = await updateComplaintStatus(
           complaintId,
           newStatus,
-          // token,
           remarks
         );
 
@@ -329,7 +298,7 @@ const Complaints = () => {
           setSelectedComplaint(null);
           setIsEditMode(false);
 
-          // Refresh complaints list
+          // Refresh complaints
           const refreshed = await getAllComplaints();
           if (Array.isArray(refreshed)) {
             setComplaints(refreshed);
@@ -346,17 +315,15 @@ const Complaints = () => {
     [selectedComplaint, filters, applyFilters, success, error]
   );
 
-  // ✅ NEW: Handle complaint update (from edit mode)
+  // Handle complaint update (from edit)
   const handleComplaintUpdate = useCallback(async () => {
-    console.log("🔄 Complaint updated, refreshing list...");
+    console.log("🔄 Complaint updated, refreshing...");
     
     try {
-      // Close modal
       setIsModalOpen(false);
       setSelectedComplaint(null);
       setIsEditMode(false);
 
-      // Refresh complaints
       const refreshed = await getAllComplaints();
       if (Array.isArray(refreshed)) {
         setComplaints(refreshed);
@@ -368,11 +335,10 @@ const Complaints = () => {
       console.error("Error refreshing complaints:", err);
       error("⚠️ Failed to refresh complaints list.");
     }
-  }, [token, filters, applyFilters, success, error]);
+  }, [filters, applyFilters, success, error]);
 
   // Close modal
   const handleCloseModal = useCallback(() => {
-    console.log("🚪 Closing modal");
     setIsModalOpen(false);
     setSelectedComplaint(null);
     setIsEditMode(false);
@@ -404,7 +370,7 @@ const Complaints = () => {
     }
   }, [filteredComplaints, filters, success, error]);
 
-  // Print complaints
+  // Print
   const handlePrint = useCallback(() => {
     try {
       exportToPrint(filteredComplaints);
@@ -422,7 +388,12 @@ const Complaints = () => {
     }
   }, [filteredComplaints, filters, success, error]);
 
-  // Get empty state type
+  // Pull to refresh
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchComplaints();
+  };
+
   const getEmptyStateType = () => {
     if (filters.search) return "search";
     if (
@@ -434,7 +405,6 @@ const Complaints = () => {
     return "complaints";
   };
 
-  // Show loading state
   if (isLoading) {
     return (
       <div className="p-4 sm:p-6 lg:p-8">
@@ -444,30 +414,82 @@ const Complaints = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-20 md:pb-8"> {/* Extra padding for mobile nav */}
       <div className="p-4 sm:p-6 lg:p-8">
         {/* Page Header */}
-        <div className="mb-6">
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-gray-200">
-            Manage Complaints
-          </h1>
-          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-2">
-            Filter and manage all campus complaints efficiently.
-          </p>
+        <div className="mb-4 sm:mb-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-800 dark:text-gray-200">
+                Manage Complaints
+              </h1>
+              <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-1">
+                Filter and manage campus complaints
+              </p>
+            </div>
+            {/* Mobile Filter Toggle */}
+            <button
+              onClick={() => setShowMobileFilters(!showMobileFilters)}
+              className="md:hidden flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-lg shadow-md active:scale-95 transition-transform"
+            >
+              <RiFilterLine className="h-5 w-5" />
+              <span className="text-sm font-medium">Filter</span>
+            </button>
+          </div>
         </div>
 
-        {/* Filters Component */}
-        <div className="mb-4">
+        {/* Desktop Filters (always visible) */}
+        <div className="hidden md:block mb-4">
           <ComplaintFilters
             onFilterChange={handleFilterChange}
             initialFilters={filters}
           />
         </div>
 
+        {/* Mobile Filters (slide-in panel) */}
+        {showMobileFilters && (
+          <div className="md:hidden fixed inset-0 z-50 bg-black/50" onClick={() => setShowMobileFilters(false)}>
+            <div 
+              className="absolute top-0 right-0 h-full w-80 max-w-full bg-white dark:bg-gray-800 shadow-2xl transform transition-transform duration-300 ease-out overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
+                <h2 className="text-lg font-bold text-gray-800 dark:text-gray-200">Filters</h2>
+                <button
+                  onClick={() => setShowMobileFilters(false)}
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                >
+                  <RiCloseLine className="h-6 w-6" />
+                </button>
+              </div>
+              <div className="p-4">
+                <ComplaintFilters
+                  onFilterChange={handleFilterChange}
+                  initialFilters={filters}
+                />
+                <div className="mt-4 flex gap-2">
+                  <button
+                    onClick={handleClearFilters}
+                    className="flex-1 px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                  >
+                    Clear All
+                  </button>
+                  <button
+                    onClick={() => setShowMobileFilters(false)}
+                    className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition-colors"
+                  >
+                    Apply
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Filter Highlight Banner */}
         {filterHighlight && filters.status && (
           <div
-            className={`mb-4 border-l-4 p-4 rounded-lg shadow-sm animate-slideDown relative ${
+            className={`mb-4 border-l-4 p-3 sm:p-4 rounded-lg shadow-sm animate-slideDown relative ${
               filters.status === "Resolved"
                 ? "border-green-600 bg-green-50 dark:bg-green-900/20"
                 : filters.status === "Pending"
@@ -477,8 +499,8 @@ const Complaints = () => {
                 : "border-red-600 bg-red-50 dark:bg-red-900/20"
             }`}
           >
-            <div className="flex items-center gap-3">
-              <span className="text-2xl sm:text-3xl">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <span className="text-xl sm:text-2xl lg:text-3xl">
                 {filters.status === "Resolved"
                   ? "✅"
                   : filters.status === "Pending"
@@ -488,10 +510,10 @@ const Complaints = () => {
                   : "❌"}
               </span>
               <div className="flex-1 min-w-0">
-                <p className="font-semibold text-gray-800 dark:text-gray-200 truncate">
+                <p className="font-semibold text-sm sm:text-base text-gray-800 dark:text-gray-200 truncate">
                   Showing {filters.status} complaints
                 </p>
-                <p className="text-sm text-gray-500">
+                <p className="text-xs sm:text-sm text-gray-500">
                   Found {filteredComplaints.length} item
                   {filteredComplaints.length !== 1 ? "s" : ""}
                 </p>
@@ -499,7 +521,6 @@ const Complaints = () => {
               <button
                 onClick={() => setFilterHighlight(false)}
                 className="flex-shrink-0 p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                aria-label="Close filter banner"
               >
                 <RiCloseLine className="h-5 w-5" />
               </button>
@@ -507,31 +528,43 @@ const Complaints = () => {
           </div>
         )}
 
-        {/* Table Header with Export Buttons */}
-        <div className="bg-white dark:bg-gray-800 p-4 rounded-t-lg shadow-sm border border-gray-200 dark:border-gray-700 border-b-0">
+        {/* Table Header with Export + Refresh */}
+        <div className="bg-white dark:bg-gray-800 p-3 sm:p-4 rounded-t-lg shadow-sm border border-gray-200 dark:border-gray-700 border-b-0">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-            <h2 className="text-lg sm:text-xl font-bold text-gray-800 dark:text-gray-200">
+            <h2 className="text-base sm:text-lg lg:text-xl font-bold text-gray-800 dark:text-gray-200">
               {filteredComplaints.length} Complaint
               {filteredComplaints.length !== 1 ? "s" : ""}
             </h2>
-            {filteredComplaints.length > 0 && (
-              <div className="flex gap-2 w-full sm:w-auto">
-                <button
-                  onClick={handleExportCSV}
-                  className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 active:bg-green-800 transition-all text-sm font-medium"
-                >
-                  <RiDownloadLine className="h-4 w-4" />
-                  <span>CSV</span>
-                </button>
-                <button
-                  onClick={handlePrint}
-                  className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-all text-sm font-medium"
-                >
-                  <RiPrinterLine className="h-4 w-4" />
-                  <span>Print</span>
-                </button>
-              </div>
-            )}
+            <div className="flex gap-2 w-full sm:w-auto">
+              {/* Refresh Button */}
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="flex items-center justify-center gap-2 px-3 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 active:bg-gray-400 transition-all text-sm font-medium disabled:opacity-50"
+              >
+                <RiRefreshLine className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+                <span className="hidden sm:inline">{refreshing ? 'Refreshing...' : 'Refresh'}</span>
+              </button>
+              
+              {filteredComplaints.length > 0 && (
+                <>
+                  <button
+                    onClick={handleExportCSV}
+                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 active:bg-green-800 transition-all text-sm font-medium"
+                  >
+                    <RiDownloadLine className="h-4 w-4" />
+                    <span className="hidden sm:inline">CSV</span>
+                  </button>
+                  <button
+                    onClick={handlePrint}
+                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-all text-sm font-medium"
+                  >
+                    <RiPrinterLine className="h-4 w-4" />
+                    <span className="hidden sm:inline">Print</span>
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
@@ -559,8 +592,8 @@ const Complaints = () => {
           isOpen={isModalOpen}
           onClose={handleCloseModal}
           onStatusUpdate={handleStatusUpdate}
-          onComplaintUpdate={handleComplaintUpdate} // ✅ NEW: Pass update handler
-          isEditMode={isEditMode} // ✅ NEW: Pass edit mode flag
+          onComplaintUpdate={handleComplaintUpdate}
+          isEditMode={isEditMode}
         />
       )}
     </div>

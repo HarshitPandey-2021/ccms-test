@@ -1,41 +1,57 @@
 // src/components/layout/Layout.jsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import Navbar from "./Navbar";
 import Sidebar from "./Sidebar";
+import BottomNavigation from "./BottomNavigation";
 
 const Layout = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const location = useLocation();
 
-  const handleToggleSidebar = () => {
-    setSidebarOpen((prev) => !prev);
-  };
-
-  const handleCloseSidebar = () => {
+  // Close sidebar on route change
+  useEffect(() => {
     setSidebarOpen(false);
-  };
+  }, [location.pathname]);
+
+  // Close sidebar on escape key
+  useEffect(() => {
+    const handleEscape = (e) => {
+      if (e.key === "Escape") setSidebarOpen(false);
+    };
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, []);
+
+  // Prevent body scroll when mobile sidebar is open
+  useEffect(() => {
+    if (sidebarOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [sidebarOpen]);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
-      {/* Navbar - Fixed at top */}
-      <Navbar onMenuClick={handleToggleSidebar} />
+      {/* Navbar */}
+      <Navbar onMenuClick={() => setSidebarOpen(true)} />
 
-      <div className="flex">
-        {/* Sidebar */}
-        <Sidebar isOpen={sidebarOpen} onClose={handleCloseSidebar} />
+      {/* Sidebar */}
+      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-        {/* Main Content - pt-16 for navbar height, lg:ml-64 for desktop sidebar */}
-        <main className="flex-1 w-full min-h-screen pt-16 lg:ml-64 transition-all duration-300">
-          <div className="w-full h-full">{children}</div>
-        </main>
-      </div>
+      {/* Main Content */}
+      <main className="pt-16 md:pl-64 min-h-screen transition-all duration-200">
+        <div className="pb-20 md:pb-6">
+          {children}
+        </div>
+      </main>
 
-      {/* Mobile Sidebar Overlay */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden backdrop-blur-sm"
-          onClick={handleCloseSidebar}
-        />
-      )}
+      {/* Bottom Navigation (Mobile Only) */}
+      <BottomNavigation />
     </div>
   );
 };
