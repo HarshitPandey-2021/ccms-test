@@ -24,6 +24,11 @@ app.use(
       "https://ccms-admin-test.vercel.app",
       "https://ccms-student-test.vercel.app",
 
+            // Testing - ACTUAL URLs (ADD THESE!)
+      "https://landing-test-liard-one.vercel.app",    // ✅ ADD THIS!
+      "https://admin-test-nine.vercel.app",           // ✅ ADD THIS!
+      "https://user-dash-test.vercel.app",            // ✅ ADD THIS!
+
       "http://localhost:5173",                  // Local admin
       "http://localhost:5174",                  // Local landing
       "http://localhost:3001",                  // Local user
