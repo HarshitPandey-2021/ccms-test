@@ -37,18 +37,21 @@ const Layout = ({ children }) => {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
-      {/* Navbar */}
-      <Navbar onMenuClick={() => setSidebarOpen(true)} />
+      {/* Navbar - Sticky at top */}
+      <Navbar onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
 
-      {/* Sidebar */}
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      {/* Content Wrapper */}
+      <div className="flex">
+        {/* Sidebar */}
+        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      {/* Main Content */}
-      <main className="pt-16 md:pl-64 min-h-screen transition-all duration-200">
-        <div className="pb-20 md:pb-6">
-          {children}
-        </div>
-      </main>
+        {/* Main Content */}
+        <main className="flex-1 md:ml-64 min-h-[calc(100vh-4rem)] transition-all duration-200">
+          <div className="pb-20 md:pb-6">
+            {children}
+          </div>
+        </main>
+      </div>
 
       {/* Bottom Navigation (Mobile Only) */}
       <BottomNavigation />
