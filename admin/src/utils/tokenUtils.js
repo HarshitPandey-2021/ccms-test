@@ -38,9 +38,29 @@ export function getAdminUser() {
   }
 }
 
+// admin/src/utils/tokenUtils.js - REPLACE logoutAdmin function:
+
 export function logoutAdmin() {
-  localStorage.removeItem(ADMIN_TOKEN_KEY);
-  localStorage.removeItem(ADMIN_REFRESH_KEY);
-  localStorage.removeItem(ADMIN_SESSION_KEY);
-    window.location.replace("https://ccms-home.vercel.app");
+  // Clear ALL possible storage keys
+  const keysToRemove = [
+    "adminToken",
+    "adminRefreshToken", 
+    "ccms-admin-session",
+    "ccms-admin-token",
+    "token",
+    "authToken",
+    "adminUser",
+    "adminProfile",
+    "user",
+    "profile",
+  ];
+  
+  keysToRemove.forEach(key => {
+    localStorage.removeItem(key);
+  });
+  
+  sessionStorage.clear();
+  
+  // ✅ USE REPLACE (prevents back button)
+  window.location.replace("https://landing-test-liard-one.vercel.app/login");
 }

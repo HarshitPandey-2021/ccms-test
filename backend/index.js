@@ -1085,6 +1085,61 @@ app.post("/api/auth/register/resend-otp", async (req, res) => {
   }
 });
 
+// backend/index.js - ADD THIS ENDPOINT
+
+// ✅ NEW: Admin endpoint to reset student registration (for testing/mistakes)
+app.post(
+  "/api/admin/students/reset",
+  auth,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      const { rollNo } = req.body;
+
+      if (!rollNo) {
+        return res.status(400).json({ message: "Roll number required" });
+      }
+
+      // Find student
+      const student = await AllowedStudents.findOne({ rollNo: rollNo.trim() });
+      if (!student) {
+        return res.status(404).json({ message: "Student not found in whitelist" });
+      }
+
+      // Delete from Users if exists
+      if (student.userId) {
+        await Users.deleteOne({ _id: toObjectId(student.userId) });
+      }
+
+      // Reset in AllowedStudents
+      await AllowedStudents.updateOne(
+        { rollNo: rollNo.trim() },
+        {
+          $set: {
+            isRegistered: false,
+            registeredAt: null,
+            registeredEmail: null,
+            userId: null,
+          },
+        }
+      );
+
+      await AdminLogs.insertOne({
+        adminId: req.user.userId,
+        action: "RESET_STUDENT_REGISTRATION",
+        details: { rollNo },
+        timestamp: new Date(),
+      });
+
+      res.json({ 
+        message: `Student ${student.name} (${rollNo}) reset successfully. They can register again.` 
+      });
+    } catch (error) {
+      console.error("Reset student error:", error);
+      res.status(500).json({ message: "Failed to reset student" });
+    }
+  }
+);
 
 // ============================================
 // EXISTING AUTH ROUTES (UNCHANGED)
@@ -1860,7 +1915,7 @@ app.put(
 
       await AdminLogs.insertOne({
         adminId: req.user.userId,
-        action: "UPDATE_COMPLAINT_STATUS",
+        action: "UPDATE_STATUS",
         complaintId: id,
         details: { status, adminRemarks, assignedTo },
         timestamp: new Date(),
@@ -1973,7 +2028,7 @@ app.patch(
 
       await AdminLogs.insertOne({
         adminId: req.user.userId,
-        action: "MARK_COMPLAINT_READ",
+        action: "VIEW_COMPLAINT",
         complaintId: id,
         timestamp: new Date(),
       });
@@ -2072,6 +2127,65 @@ app.get(
     } catch (e) {
       console.error("Analytics error:", e);
       res.status(500).json({ message: "Failed to fetch analytics" });
+    }
+  }
+);
+
+// backend/index.js - ADD THIS ENDPOINT (after other admin endpoints):
+
+// ✅ ADMIN: Reset Student Registration
+app.post(
+  "/api/admin/students/reset",
+  auth,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      const { rollNo } = req.body;
+
+      if (!rollNo) {
+        return res.status(400).json({ message: "Roll number required" });
+      }
+
+      // Find student in whitelist
+      const student = await AllowedStudents.findOne({ rollNo: rollNo.trim() });
+      
+      if (!student) {
+        return res.status(404).json({ message: "Student not found in whitelist" });
+      }
+
+      // Delete from Users if exists
+      if (student.userId) {
+        await Users.deleteOne({ _id: toObjectId(student.userId) });
+      }
+
+      // Reset in AllowedStudents
+      await AllowedStudents.updateOne(
+        { rollNo: rollNo.trim() },
+        {
+          $set: {
+            isRegistered: false,
+            registeredAt: null,
+            registeredEmail: null,
+            userId: null,
+          },
+        }
+      );
+
+      // Log activity
+      await AdminLogs.insertOne({
+        adminId: req.user.userId,
+        action: "RESET_STUDENT",
+        details: { rollNo, studentName: student.name },
+        timestamp: new Date(),
+      });
+
+      res.json({ 
+        success: true,
+        message: `Student ${student.name} (${rollNo}) reset successfully. They can register again.` 
+      });
+    } catch (error) {
+      console.error("Reset student error:", error);
+      res.status(500).json({ message: "Failed to reset student" });
     }
   }
 );

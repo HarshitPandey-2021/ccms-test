@@ -23,6 +23,7 @@ import {
 } from "../utils/tokenUtils";
 import { logActivity, ACTIVITY_TYPES } from "../services/activityLogger";
 import { getProfile, updateProfile, changePassword } from "../api";
+import ConfirmDialog from '../components/ConfirmDialog'; // ✅ Add this import if missing
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -39,7 +40,7 @@ const Profile = () => {
 
   const [isEditing, setIsEditing] = useState(false);
   const [editedData, setEditedData] = useState({ name: "", email: "" });
-
+const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const [showPasswordChange, setShowPasswordChange] = useState(false);
   const [passwords, setPasswords] = useState({
     current: "",
@@ -130,64 +131,68 @@ const Profile = () => {
     initProfile();
   }, [navigate, error]);
 
-  const handleLogout = () => {
-    logActivity(ACTIVITY_TYPES.LOGOUT, { page: "Profile" });
-    logoutAdmin();
-    success("Logged out successfully!");
-    setTimeout(() => {
-      window.location.href = "http://localhost:5174";
-    }, 1000);
-  };
+ const handleLogout = () => {
+  setShowLogoutDialog(true); // ✅ Show dialog instead of direct logout
+};
 
-  const handleSaveProfile = async () => {
-    try {
-      const token = getAdminToken();
-      if (!token) {
-        error("Session expired. Please login again.");
-        navigate("/unauthorized");
-        return;
-      }
+const handleConfirmLogout = () => {
+  logActivity(ACTIVITY_TYPES.LOGOUT, { page: "Profile" });
+  logoutAdmin();
+  success("Logged out successfully!");
+};
 
-      console.log("DEBUG saving profile:", editedData);
+// admin/src/pages/Profile.jsx - UPDATE handleSaveProfile function (around line 170):
 
-      const payload = {
-        name: editedData.name,
-        // phone/email can be added later when backend supports it
-      };
-
-      await updateProfile(payload, token);
-
-      const updated = {
-        ...profileData,
-        name: editedData.name,
-        email: editedData.email,
-      };
-
-      setProfileData(updated);
-      setIsEditing(false);
-
-      saveAdminSession(
-        {
-          name: updated.name,
-          email: updated.email,
-          role: updated.role,
-          userId: updated.userId,
-        },
-        token
-      );
-
-      logActivity(ACTIVITY_TYPES.PROFILE_UPDATE, {
-        action: "Updated profile details",
-        name: editedData.name,
-        email: editedData.email,
-      });
-
-      success("Profile updated successfully!");
-    } catch (err) {
-      console.error("Profile update error:", err);
-      error(err.message || "Failed to update profile");
+const handleSaveProfile = async () => {
+  try {
+    const token = getAdminToken();
+    if (!token) {
+      error("Session expired. Please login again.");
+      navigate("/unauthorized");
+      return;
     }
-  };
+
+    const payload = {
+      name: editedData.name,
+    };
+
+    await updateProfile(payload, token);
+
+    const updated = {
+      ...profileData,
+      name: editedData.name,
+      email: editedData.email,
+    };
+
+    setProfileData(updated);
+    setIsEditing(false);
+
+    // ✅ UPDATE STORAGE IMMEDIATELY
+    const updatedSession = {
+      name: updated.name,
+      email: updated.email,
+      role: updated.role,
+      id: updated.userId,
+    };
+    
+    localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(updatedSession));
+    localStorage.setItem("adminUser", JSON.stringify(updatedSession));
+    localStorage.setItem("user", JSON.stringify(updatedSession));
+
+    // ✅ TRIGGER STORAGE EVENT (forces navbar re-render)
+    window.dispatchEvent(new Event('storage'));
+
+    logActivity(ACTIVITY_TYPES.PROFILE_UPDATE, {
+      action: "Updated profile details",
+      name: editedData.name,
+    });
+
+    success("Profile updated successfully!");
+  } catch (err) {
+    console.error("Profile update error:", err);
+    error(err.message || "Failed to update profile");
+  }
+};
 
   const handleCancelEdit = () => {
     setEditedData({ name: profileData.name, email: profileData.email });
@@ -347,14 +352,24 @@ const Profile = () => {
             </div>
 
             <button
-              onClick={handleLogout}
-              className="w-full mt-8 flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white font-semibold rounded-xl hover:from-red-600 hover:to-red-700 focus:ring-2 focus:ring-red-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition-all shadow-lg hover:shadow-xl"
-            >
-              <RiLogoutBoxRLine className="h-5 w-5" />
-              <span>Sign Out</span>
-            </button>
+  onClick={handleLogout} // ✅ Changed from direct logout
+  className="w-full mt-8 flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white font-semibold rounded-xl hover:from-red-600 hover:to-red-700 focus:ring-2 focus:ring-red-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition-all shadow-lg hover:shadow-xl"
+>
+  <RiLogoutBoxRLine className="h-5 w-5" />
+  <span>Sign Out</span>
+</button>
           </div>
         </div>
+        <ConfirmDialog
+                isOpen={showLogoutDialog}
+                onClose={() => setShowLogoutDialog(false)}
+                onConfirm={handleConfirmLogout}
+                title="Confirm Logout"
+                message="Are you sure you want to logout? You'll be redirected to the login page."
+                confirmText="Yes, Logout"
+                cancelText="Cancel"
+                type="danger"
+              />
 
         {/* Right Column - Details & Activity */}
         <div className="lg:col-span-2 space-y-6">
@@ -590,6 +605,18 @@ const Profile = () => {
           </div>
         </div>
       </div>
+      
+{/* ✅ ADD THIS DIALOG AT THE VERY END (before closing </div>) */}
+<ConfirmDialog
+  isOpen={showLogoutDialog}
+  onClose={() => setShowLogoutDialog(false)}
+  onConfirm={handleConfirmLogout}
+  title="Confirm Logout"
+  message="Are you sure you want to logout? You'll be redirected to the login page."
+  confirmText="Yes, Logout"
+  cancelText="Cancel"
+  type="danger"
+/>
     </div>
   );
 };

@@ -257,10 +257,10 @@ export default function SignupPage() {
         
         {/* Subtitle based on step */}
         {step === 1 && (
-          <p className="text-center text-gray-600 text-sm mb-4">
-            Only University of Lucknow B.Tech AI students can register
-          </p>
-        )}
+  <p className="text-center text-gray-600 text-sm mb-4">
+    For University of Lucknow students only
+  </p>
+)}
         
         {step === 2 && studentInfo && (
           <div className="text-center mb-4">
@@ -526,13 +526,10 @@ export default function SignupPage() {
 
         {/* Footer */}
         <div className="mt-6 pt-4 border-t border-gray-200">
-          <p className="text-center text-xs text-gray-500">
-            🔒 Only B.Tech AI students (2023-2027 batches) can register
-          </p>
-          <p className="text-center text-xs text-gray-400 mt-1">
-            Contact your CR if you face any issues
-          </p>
-        </div>
+  <p className="text-center text-xs text-gray-500">
+    Having trouble? Contact your Class Representative
+  </p>
+</div>
       </div>
     </div>
   );
