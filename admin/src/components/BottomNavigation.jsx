@@ -1,11 +1,12 @@
-// src/components/BottomNavigation.jsx
+// admin/src/components/BottomNavigation.jsx - FIXED (5 items max)
+
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   RiDashboardLine,
   RiFileListLine,
+  RiTeamLine,
   RiBarChartLine,
-  RiHistoryLine,
   RiUserLine,
 } from 'react-icons/ri';
 
@@ -13,12 +14,12 @@ export default function BottomNavigation() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  // ✅ ONLY 5 ITEMS (removed Activity Logs from mobile nav)
   const navItems = [
-    { path: '/dashboard', icon: RiDashboardLine, label: 'Dashboard' },
-    { path: '/complaints', icon: RiFileListLine, label: 'Complaints' },
-      { path: '/students', label: 'Students', icon: RiTeamLine }, // ✅ ADD THIS
-    { path: '/analytics', icon: RiBarChartLine, label: 'Analytics' },
-    { path: '/activity-logs', icon: RiHistoryLine, label: 'Logs' },
+    { path: '/dashboard', icon: RiDashboardLine, label: 'Home' },
+    { path: '/complaints', icon: RiFileListLine, label: 'Cases' },
+    { path: '/students', icon: RiTeamLine, label: 'Students' },
+    { path: '/analytics', icon: RiBarChartLine, label: 'Stats' },
     { path: '/profile', icon: RiUserLine, label: 'Profile' },
   ];
 
@@ -30,34 +31,34 @@ export default function BottomNavigation() {
   };
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 z-50">
-      <div className="flex justify-around items-center h-16 px-2">
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 z-50 shadow-lg">
+      <div className="flex justify-around items-center h-16">
         {navItems.map(({ path, icon: Icon, label }) => {
           const active = isActive(path);
           return (
             <button
               key={path}
               onClick={() => navigate(path)}
-              className={`flex flex-col items-center justify-center flex-1 h-full transition-all active:scale-95 ${
+              className={`relative flex flex-col items-center justify-center flex-1 h-full transition-all active:scale-95 ${
                 active
                   ? 'text-indigo-600 dark:text-indigo-400'
                   : 'text-gray-600 dark:text-gray-400'
               }`}
             >
               <Icon
-                className={`h-6 w-6 transition-transform ${
+                className={`h-5 w-5 transition-transform ${
                   active ? 'scale-110' : ''
                 }`}
               />
               <span
-                className={`text-xs mt-1 font-medium ${
-                  active ? 'text-indigo-600 dark:text-indigo-400' : ''
+                className={`text-[10px] mt-0.5 font-medium ${
+                  active ? 'font-semibold' : ''
                 }`}
               >
                 {label}
               </span>
               {active && (
-                <div className="absolute bottom-0 w-12 h-1 bg-indigo-600 rounded-t-full" />
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-1 bg-indigo-600 rounded-b-full" />
               )}
             </button>
           );

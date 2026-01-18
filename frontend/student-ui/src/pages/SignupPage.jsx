@@ -126,7 +126,7 @@ export default function SignupPage() {
       });
       
      setSuccess(
-  `📧 Verification code sent to ${normalizedEmail}!`
+  `📧 Verification code sent to ${form.email}!`
 );
 
 // And ADD this helper text below the OTP input boxes:
@@ -137,6 +137,9 @@ export default function SignupPage() {
     (OTPs love playing hide and seek! 🙈)
   </span>
 </p>
+
+
+
       setStep(2);
       setResendTimer(60);
     } catch (err) {

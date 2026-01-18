@@ -30,6 +30,7 @@ function getPageName(path) {
     "/dashboard": "Dashboard",
     "/complaints": "Complaints",
     "/analytics": "Analytics",
+     "/students": "Students", // ✅ ADD THIS
     "/activity-logs": "Activity Logs",
     "/profile": "Profile",
   };
@@ -41,7 +42,7 @@ function RouteHandler() {
   const navigate = useNavigate();
   
   useEffect(() => {
-    const validRoutes = ['/', '/dashboard', '/complaints', '/analytics', '/activity-logs', '/profile', '/unauthorized'];
+    const validRoutes = ['/', '/dashboard', '/complaints', '/analytics', '/students', '/activity-logs', '/profile', '/unauthorized']; // ✅ ADD /students
     const currentPath = window.location.pathname;
     
     if (!validRoutes.includes(currentPath)) {
@@ -196,14 +197,7 @@ function AppContent() {
     </ProtectedRoute>
   }
 />
-              <Route
-                path="/activity-logs"
-                element={
-                  <ProtectedRoute>
-                    <ActivityLogs />
-                  </ProtectedRoute>
-                }
-              />
+              
               <Route
                 path="/profile"
                 element={

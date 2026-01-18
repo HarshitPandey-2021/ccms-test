@@ -299,6 +299,10 @@ export async function resetStudent(rollNo) {
   });
   return handleResponse(res);
 }
+export async function getTrends(days = 7) {
+  const res = await apiCall(`${API_BASE}/complaints/admin/trends?days=${days}`);
+  return handleResponse(res);
+}
 
 // ✅ UPDATE THE DEFAULT EXPORT
 const api = {
@@ -316,6 +320,7 @@ const api = {
   getAllLogs,
   searchStudent,    // ✅ ADD
   resetStudent,     // ✅ ADD
+   getTrends, // ✅ ADD THIS
   logout,
 };
 

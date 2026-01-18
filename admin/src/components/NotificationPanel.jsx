@@ -222,14 +222,22 @@ export default function NotificationPanel() {
     }
   };
 
-  const clearAll = () => {
-    if (window.confirm("Are you sure you want to clear all notifications?")) {
-      setNotifications([]);
-      setIsOpen(false);
-      setUnreadCount(0);
-    }
-  };
+ // In NotificationPanel.jsx - REPLACE clearAll function:
 
+const clearAll = () => {
+  if (window.confirm("Are you sure you want to clear all notifications?")) {
+    setNotifications([]);
+    setUnreadCount(0);
+    
+    // ✅ CLEAR FROM LOCALSTORAGE
+    localStorage.removeItem('admin-notifications');
+    localStorage.removeItem('admin-notifications-cleared');
+    localStorage.setItem('admin-notifications-cleared', 'true');
+    
+    setIsOpen(false);
+    console.log('✅ All notifications cleared from state and localStorage');
+  }
+};
   const handleViewAll = () => {
     setIsOpen(false);
     navigate("/complaints");
@@ -265,6 +273,37 @@ export default function NotificationPanel() {
     document.addEventListener("keydown", handleEscape);
     return () => document.removeEventListener("keydown", handleEscape);
   }, [isOpen]);
+  // ADD THIS useEffect AFTER the existing useEffects (around line 180):
+
+// ✅ Load notifications from localStorage on mount
+useEffect(() => {
+  const savedNotifications = localStorage.getItem('admin-notifications');
+  const wasCleared = localStorage.getItem('admin-notifications-cleared');
+  
+  if (wasCleared === 'true') {
+    // User cleared all, don't load old data
+    setNotifications([]);
+    setUnreadCount(0);
+  } else if (savedNotifications) {
+    try {
+      const parsed = JSON.parse(savedNotifications);
+      if (Array.isArray(parsed)) {
+        setNotifications(parsed);
+        setUnreadCount(parsed.filter(n => !n.read).length);
+      }
+    } catch (e) {
+      console.error('Failed to parse saved notifications:', e);
+    }
+  }
+}, []);
+
+// ✅ Save notifications to localStorage when they change
+useEffect(() => {
+  if (notifications.length > 0) {
+    localStorage.setItem('admin-notifications', JSON.stringify(notifications));
+    localStorage.removeItem('admin-notifications-cleared');
+  }
+}, [notifications]);
 
   return (
     <div className="relative" ref={panelRef}>

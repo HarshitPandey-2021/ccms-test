@@ -1141,6 +1141,77 @@ app.post(
   }
 );
 
+// backend/index.js - ADD THIS ENDPOINT
+
+// ✅ GET: Trend data (last 7 days)
+app.get(
+  "/api/complaints/admin/trends",
+  auth,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      const { days = 7 } = req.query;
+      
+      const daysAgo = new Date();
+      daysAgo.setDate(daysAgo.getDate() - parseInt(days));
+
+      // Aggregate complaints by day
+      const trends = await Complaints.aggregate([
+        {
+          $match: {
+            submittedAt: { $gte: daysAgo }
+          }
+        },
+        {
+          $group: {
+            _id: {
+              $dateToString: { format: "%Y-%m-%d", date: "$submittedAt" }
+            },
+            submitted: { $sum: 1 },
+            resolved: {
+              $sum: {
+                $cond: [{ $eq: ["$status", "Resolved"] }, 1, 0]
+              }
+            }
+          }
+        },
+        {
+          $sort: { _id: 1 }
+        }
+      ]).toArray();
+
+      // Fill in missing days with 0
+      const result = [];
+      for (let i = parseInt(days) - 1; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        const dateStr = date.toISOString().split('T')[0];
+        
+        const found = trends.find(t => t._id === dateStr);
+        
+        result.push({
+          date: dateStr,
+          day: date.toLocaleDateString('en-US', { weekday: 'short' }),
+          submitted: found?.submitted || 0,
+          resolved: found?.resolved || 0,
+        });
+      }
+
+      res.json({
+        success: true,
+        trends: result
+      });
+
+    } catch (error) {
+      console.error("Trends error:", error);
+      res.status(500).json({ 
+        success: false,
+        message: "Failed to fetch trends" 
+      });
+    }
+  }
+);
+
 // ============================================
 // EXISTING AUTH ROUTES (UNCHANGED)
 // ============================================

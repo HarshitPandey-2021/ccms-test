@@ -4,6 +4,7 @@ import Charts from "../components/Charts";
 import Loading from "../components/Loading";
 import { getStats } from "../api";
 import { getAdminToken } from "../utils/tokenUtils";
+import { getStats, getTrends } from "../api"; // ✅ Add getTrends import
 import {
   RiBarChartFill,
   RiPieChartFill,
@@ -104,15 +105,24 @@ const Analytics = () => {
       setPriorityData(priorities);
 
       // Mock trend data (last 7 days) - you can replace with real API data
-      const generateTrendData = () => {
-        const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-        return days.map((day, i) => ({
-          day,
-          Submitted: Math.floor(Math.random() * 20) + 5,
-          Resolved: Math.floor(Math.random() * 15) + 3,
-        }));
-      };
-      setTrendData(generateTrendData());
+      // ✅ REPLACE WITH THIS:
+try {
+  const trendsResponse = await getTrends(7); // Get last 7 days
+  if (trendsResponse.success && trendsResponse.trends) {
+    const formattedTrends = trendsResponse.trends.map(t => ({
+      day: t.day,
+      date: t.date,
+      Submitted: t.submitted,
+      Resolved: t.resolved,
+    }));
+    setTrendData(formattedTrends);
+  } else {
+    setTrendData([]);
+  }
+} catch (err) {
+  console.error("Failed to fetch trends:", err);
+  setTrendData([]);
+}
 
       setLastUpdated(new Date());
 
