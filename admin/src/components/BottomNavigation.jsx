@@ -16,6 +16,7 @@ export default function BottomNavigation() {
   const navItems = [
     { path: '/dashboard', icon: RiDashboardLine, label: 'Dashboard' },
     { path: '/complaints', icon: RiFileListLine, label: 'Complaints' },
+      { path: '/students', label: 'Students', icon: RiTeamLine }, // ✅ ADD THIS
     { path: '/analytics', icon: RiBarChartLine, label: 'Analytics' },
     { path: '/activity-logs', icon: RiHistoryLine, label: 'Logs' },
     { path: '/profile', icon: RiUserLine, label: 'Profile' },

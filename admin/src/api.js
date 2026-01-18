@@ -280,7 +280,27 @@ export async function getAllLogs() {
 export async function logout() {
   logoutAdmin();
 }
+// api.js - ADD THESE FUNCTIONS AT THE END
 
+// ✅ NEW: Search student by roll number
+export async function searchStudent(rollNo) {
+  const res = await apiCall(`${API_BASE}/admin/students/search`, {
+    method: "POST",
+    body: JSON.stringify({ rollNo }),
+  });
+  return handleResponse(res);
+}
+
+// ✅ NEW: Reset student registration
+export async function resetStudent(rollNo) {
+  const res = await apiCall(`${API_BASE}/admin/students/reset`, {
+    method: "POST",
+    body: JSON.stringify({ rollNo }),
+  });
+  return handleResponse(res);
+}
+
+// ✅ UPDATE THE DEFAULT EXPORT
 const api = {
   getAllComplaints,
   getUnreadComplaints,
@@ -294,6 +314,8 @@ const api = {
   changePassword,
   getDepartments,
   getAllLogs,
+  searchStudent,    // ✅ ADD
+  resetStudent,     // ✅ ADD
   logout,
 };
 

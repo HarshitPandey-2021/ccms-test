@@ -8,6 +8,7 @@ import BottomNavigation from "./components/BottomNavigation.jsx"; // ✅ NEW
 import AuthInitializer from "./components/AuthInitializer.jsx";
 import useKeyboardShortcuts from "./hooks/useKeyboardShortcuts.js";
 import { ToastProvider } from "./context/ToastContext.jsx";
+import ManageStudents from "./pages/ManageStudents.jsx"; // ✅ ADD THIS IMPORT
 import {
   initializeActivityLogger,
   logActivity,
@@ -178,6 +179,23 @@ function AppContent() {
                   </ProtectedRoute>
                 }
               />
+              {/* ✅ NEW ROUTE */}
+<Route
+  path="/students"
+  element={
+    <ProtectedRoute>
+      <ManageStudents />
+    </ProtectedRoute>
+  }
+/>
+<Route
+  path="/activity-logs"
+  element={
+    <ProtectedRoute>
+      <ActivityLogs />
+    </ProtectedRoute>
+  }
+/>
               <Route
                 path="/activity-logs"
                 element={

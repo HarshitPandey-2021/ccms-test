@@ -2245,6 +2245,169 @@ app.get("/api/complaints/public/stats", async (req, res) => {
   }
 });
 
+// backend/index.js - ADD THESE ENDPOINTS
+
+// ✅ ENDPOINT 1: Search Student by Roll Number
+app.post(
+  "/api/admin/students/search",
+  auth,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      const { rollNo } = req.body;
+
+      if (!rollNo) {
+        return res.status(400).json({ 
+          success: false,
+          message: "Roll number required" 
+        });
+      }
+
+      // Find student in whitelist
+      const student = await AllowedStudents.findOne({ rollNo: rollNo.trim() });
+      
+      if (!student) {
+        return res.status(404).json({ 
+          success: false,
+          message: `Roll number ${rollNo} not found in whitelist` 
+        });
+      }
+
+      res.json({ 
+        success: true,
+        student: {
+          name: student.name,
+          rollNo: student.rollNo,
+          batch: student.batch,
+          batchType: student.batchType,
+          isRegistered: student.isRegistered,
+          registeredEmail: student.registeredEmail || null,
+          registeredAt: student.registeredAt || null,
+        }
+      });
+    } catch (error) {
+      console.error("Search student error:", error);
+      res.status(500).json({ 
+        success: false,
+        message: "Failed to search student" 
+      });
+    }
+  }
+);
+
+// ✅ ENDPOINT 2: Reset Student Registration
+app.post(
+  "/api/admin/students/reset",
+  auth,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      const { rollNo } = req.body;
+
+      if (!rollNo) {
+        return res.status(400).json({ 
+          success: false,
+          message: "Roll number required" 
+        });
+      }
+
+      console.log(`🔧 Admin resetting student: ${rollNo}`);
+
+      // Find student in whitelist
+      const student = await AllowedStudents.findOne({ rollNo: rollNo.trim() });
+      
+      if (!student) {
+        return res.status(404).json({ 
+          success: false,
+          message: `Roll number ${rollNo} not found in whitelist` 
+        });
+      }
+
+      console.log(`📋 Found student: ${student.name}`);
+
+      let usersDeleted = 0;
+
+      // Delete from Users by userId
+      if (student.userId) {
+        try {
+          const result = await Users.deleteOne({ _id: toObjectId(student.userId) });
+          usersDeleted += result.deletedCount;
+          console.log(`🗑️ Deleted by userId: ${result.deletedCount}`);
+        } catch (err) {
+          console.log("⚠️ Failed to delete by userId:", err.message);
+        }
+      }
+
+      // Delete from Users by email (backup)
+      if (student.registeredEmail) {
+        try {
+          const result = await Users.deleteOne({ email: student.registeredEmail });
+          usersDeleted += result.deletedCount;
+          console.log(`🗑️ Deleted by email: ${result.deletedCount}`);
+        } catch (err) {
+          console.log("⚠️ Failed to delete by email:", err.message);
+        }
+      }
+
+      // Delete ALL users with this roll number (thorough cleanup)
+      const rollDeleteResult = await Users.deleteMany({ 
+        $or: [
+          { roll: rollNo.trim() },
+          { rollNo: rollNo.trim() }
+        ]
+      });
+      usersDeleted += rollDeleteResult.deletedCount;
+      console.log(`🗑️ Deleted by rollNo: ${rollDeleteResult.deletedCount}`);
+
+      // Reset in AllowedStudents using $unset
+      await AllowedStudents.updateOne(
+        { rollNo: rollNo.trim() },
+        {
+          $set: {
+            isRegistered: false
+          },
+          $unset: {
+            registeredAt: "",
+            registeredEmail: "",
+            userId: ""
+          }
+        }
+      );
+
+      console.log(`✅ Reset complete for ${student.name}`);
+
+      // Log activity
+      await AdminLogs.insertOne({
+        adminId: req.user.userId,
+        action: "RESET_STUDENT",
+        details: { 
+          rollNo, 
+          studentName: student.name,
+          usersDeleted 
+        },
+        timestamp: new Date(),
+      });
+
+      res.json({ 
+        success: true,
+        message: `${student.name} can now register again!`,
+        details: {
+          studentName: student.name,
+          rollNo: rollNo,
+          usersDeleted,
+        }
+      });
+    } catch (error) {
+      console.error("❌ Reset student error:", error);
+      res.status(500).json({ 
+        success: false,
+        message: "Failed to reset student",
+        error: error.message 
+      });
+    }
+  }
+);
+
 // ============================================
 // ADMIN: Student Registration Stats
 // ============================================

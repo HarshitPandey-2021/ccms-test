@@ -125,7 +125,18 @@ export default function SignupPage() {
         batch: response.batch,
       });
       
-      setSuccess(response.greeting || "Verification code sent!");
+     setSuccess(
+  `📧 Verification code sent to ${normalizedEmail}!`
+);
+
+// And ADD this helper text below the OTP input boxes:
+<p className="text-center text-xs text-gray-600 dark:text-gray-400 mt-3">
+  Can't find the email? Check your spam folder 🕵️
+  <br />
+  <span className="text-indigo-600 dark:text-indigo-400">
+    (OTPs love playing hide and seek! 🙈)
+  </span>
+</p>
       setStep(2);
       setResendTimer(60);
     } catch (err) {
