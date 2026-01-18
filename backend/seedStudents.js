@@ -156,11 +156,11 @@ const studentsData = [
 function getBatchInfo(rollNo) {
   const year = rollNo.substring(0, 2);
   if (year === "22") {
-    return { batch: "2022-26", type: "Year Back", emoji: "📚" };
+    return { batch: "2022-27", type: "Year Back", emoji: "📚" };
   } else if (year === "23") {
     return { batch: "2023-27", type: "Regular", emoji: "🎓" };
   } else if (year === "24") {
-    return { batch: "2024-28", type: "Lateral Entry", emoji: "🚀" };
+    return { batch: "2024-27", type: "Lateral Entry", emoji: "🚀" };
   }
   return { batch: "Unknown", type: "Unknown", emoji: "📖" };
 }
@@ -228,9 +228,9 @@ async function seedStudents() {
 
     // Summary
     const batchSummary = {
-      "2022-26 (Year Back)": documents.filter((d) => d.batch === "2022-26").length,
+      "2022-27 (Year Back)": documents.filter((d) => d.batch === "2022-27").length,
       "2023-27 (Regular)": documents.filter((d) => d.batch === "2023-27").length,
-      "2024-28 (Lateral)": documents.filter((d) => d.batch === "2024-28").length,
+      "2024-27 (Lateral)": documents.filter((d) => d.batch === "2024-27").length,
     };
 
     console.log("\n📊 Batch Summary:");

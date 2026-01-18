@@ -1,4 +1,4 @@
-// src/components/NotificationPanel.jsx - FINAL FIXED VERSION
+// src/components/NotificationPanel.jsx - COMPLETELY FIXED VERSION
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -12,7 +12,7 @@ import {
   getUnreadComplaints,
   markComplaintAsRead,
   getAllComplaints,
-} from "../api"; // ✅ use admin APIs
+} from "../api";
 import { getAdminToken } from "../utils/tokenUtils";
 
 export default function NotificationPanel() {
@@ -22,6 +22,7 @@ export default function NotificationPanel() {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [userClearedAll, setUserClearedAll] = useState(false); // ✅ NEW STATE
 
   const colorClasses = {
     blue: "bg-blue-500 text-white shadow-blue-200 dark:shadow-blue-900/50",
@@ -30,10 +31,32 @@ export default function NotificationPanel() {
   };
 
   /* =========================================================
-     🧩 FETCH NOTIFICATIONS (UNREAD FIRST, THEN FALLBACK)
+     🧩 FETCH NOTIFICATIONS (WITH CLEARED CHECK)
   ========================================================= */
   const fetchNotifications = useCallback(async () => {
     console.log("🔔 Fetching admin notifications...");
+    
+    // ✅ CHECK IF USER CLEARED ALL
+    const clearedTimestamp = localStorage.getItem('admin-notifications-cleared');
+    if (clearedTimestamp) {
+      const clearedTime = parseInt(clearedTimestamp);
+      const now = Date.now();
+      const hoursSinceCleared = (now - clearedTime) / (1000 * 60 * 60);
+      
+      // Keep cleared for 1 hour
+      if (hoursSinceCleared < 1) {
+        console.log('⏸️ User cleared notifications recently, skipping fetch');
+        setNotifications([]);
+        setUnreadCount(0);
+        setLoading(false);
+        return;
+      } else {
+        // More than 1 hour, clear the flag
+        localStorage.removeItem('admin-notifications-cleared');
+        setUserClearedAll(false);
+      }
+    }
+    
     try {
       const token = getAdminToken() || localStorage.getItem("token");
 
@@ -147,9 +170,30 @@ export default function NotificationPanel() {
     } finally {
       setLoading(false);
     }
+  }, [userClearedAll]); // ✅ Add dependency
+
+  /* =========================================================
+     🧩 LOAD CLEARED STATE ON MOUNT
+  ========================================================= */
+  useEffect(() => {
+    const clearedTimestamp = localStorage.getItem('admin-notifications-cleared');
+    if (clearedTimestamp) {
+      const clearedTime = parseInt(clearedTimestamp);
+      const now = Date.now();
+      const hoursSinceCleared = (now - clearedTime) / (1000 * 60 * 60);
+      
+      if (hoursSinceCleared < 1) {
+        setUserClearedAll(true);
+        setNotifications([]);
+        setUnreadCount(0);
+        console.log('⏸️ Notifications were cleared recently');
+      }
+    }
   }, []);
 
-  // ✅ Fetch when token is available and periodically refresh
+  /* =========================================================
+     🧩 FETCH PERIODICALLY (RESPECTS CLEARED STATE)
+  ========================================================= */
   useEffect(() => {
     const checkAndFetch = () => {
       const token = getAdminToken() || localStorage.getItem("token");
@@ -173,17 +217,15 @@ export default function NotificationPanel() {
   }, [fetchNotifications]);
 
   /* =========================================================
-     🧩 MARK SINGLE NOTIFICATION AS READ (BACKEND + UI)
+     🧩 MARK SINGLE NOTIFICATION AS READ
   ========================================================= */
   const markAsRead = async (id) => {
     try {
       const token = getAdminToken() || localStorage.getItem("token");
       if (!token) return;
 
-      // ✅ Call backend route: PATCH /complaints/admin/:id/read
       await markComplaintAsRead(id, token);
 
-      // Update local state optimistically
       setNotifications((prev) => {
         const updated = prev.map((n) =>
           n.id === id ? { ...n, read: true } : n
@@ -195,13 +237,12 @@ export default function NotificationPanel() {
       console.log("✅ Notification marked as read:", id);
     } catch (err) {
       console.error("❌ Failed to mark notification as read:", err);
-      // Reload from server to stay in sync
       fetchNotifications();
     }
   };
 
   /* =========================================================
-     🧩 MARK ALL NOTIFICATIONS AS READ
+     🧩 MARK ALL AS READ
   ========================================================= */
   const markAllAsRead = async () => {
     try {
@@ -222,22 +263,24 @@ export default function NotificationPanel() {
     }
   };
 
- // In NotificationPanel.jsx - REPLACE clearAll function:
+  /* =========================================================
+     🧩 CLEAR ALL (WITH TIMESTAMP)
+  ========================================================= */
+  const clearAll = () => {
+    if (window.confirm("Are you sure you want to clear all notifications?")) {
+      setNotifications([]);
+      setUnreadCount(0);
+      setUserClearedAll(true);
+      
+      // ✅ Save timestamp (keeps cleared for 1 hour)
+      localStorage.setItem('admin-notifications-cleared', Date.now().toString());
+      localStorage.removeItem('admin-notifications');
+      
+      setIsOpen(false);
+      console.log('✅ All notifications cleared (will stay cleared for 1 hour)');
+    }
+  };
 
-const clearAll = () => {
-  if (window.confirm("Are you sure you want to clear all notifications?")) {
-    setNotifications([]);
-    setUnreadCount(0);
-    
-    // ✅ CLEAR FROM LOCALSTORAGE
-    localStorage.removeItem('admin-notifications');
-    localStorage.removeItem('admin-notifications-cleared');
-    localStorage.setItem('admin-notifications-cleared', 'true');
-    
-    setIsOpen(false);
-    console.log('✅ All notifications cleared from state and localStorage');
-  }
-};
   const handleViewAll = () => {
     setIsOpen(false);
     navigate("/complaints");
@@ -262,8 +305,7 @@ const clearAll = () => {
       }
     };
     if (isOpen) document.addEventListener("mousedown", handleClickOutside);
-    return () =>
-      document.removeEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isOpen]);
 
   useEffect(() => {
@@ -273,37 +315,6 @@ const clearAll = () => {
     document.addEventListener("keydown", handleEscape);
     return () => document.removeEventListener("keydown", handleEscape);
   }, [isOpen]);
-  // ADD THIS useEffect AFTER the existing useEffects (around line 180):
-
-// ✅ Load notifications from localStorage on mount
-useEffect(() => {
-  const savedNotifications = localStorage.getItem('admin-notifications');
-  const wasCleared = localStorage.getItem('admin-notifications-cleared');
-  
-  if (wasCleared === 'true') {
-    // User cleared all, don't load old data
-    setNotifications([]);
-    setUnreadCount(0);
-  } else if (savedNotifications) {
-    try {
-      const parsed = JSON.parse(savedNotifications);
-      if (Array.isArray(parsed)) {
-        setNotifications(parsed);
-        setUnreadCount(parsed.filter(n => !n.read).length);
-      }
-    } catch (e) {
-      console.error('Failed to parse saved notifications:', e);
-    }
-  }
-}, []);
-
-// ✅ Save notifications to localStorage when they change
-useEffect(() => {
-  if (notifications.length > 0) {
-    localStorage.setItem('admin-notifications', JSON.stringify(notifications));
-    localStorage.removeItem('admin-notifications-cleared');
-  }
-}, [notifications]);
 
   return (
     <div className="relative" ref={panelRef}>
@@ -354,13 +365,11 @@ useEffect(() => {
             <div className="flex items-center justify-between gap-2 flex-wrap">
               {unreadCount > 0 ? (
                 <span className="text-xs bg-indigo-600 text-white px-3 py-1 rounded-full font-semibold shadow-sm">
-                  {unreadCount} new notification
-                  {unreadCount > 1 ? "s" : ""}
+                  {unreadCount} new notification{unreadCount > 1 ? "s" : ""}
                 </span>
               ) : (
                 <span className="text-xs text-gray-600 dark:text-gray-400 flex items-center gap-1">
-                  <span className="text-green-500 font-bold">✓</span> All
-                  caught up!
+                  <span className="text-green-500 font-bold">✓</span> All caught up!
                 </span>
               )}
 
@@ -374,9 +383,7 @@ useEffect(() => {
                       >
                         Mark all read
                       </button>
-                      <span className="text-gray-300 dark:text-gray-600 hidden sm:inline">
-                        •
-                      </span>
+                      <span className="text-gray-300 dark:text-gray-600 hidden sm:inline">•</span>
                     </>
                   )}
                   <button
@@ -418,10 +425,10 @@ useEffect(() => {
                   <div
                     key={notif.id}
                     onClick={() => {
-  markAsRead(notif.id);
-  setIsOpen(false);
-  navigate(`/complaints?id=${notif.id}`); // Navigate to complaints with specific ID
-}}
+                      markAsRead(notif.id);
+                      setIsOpen(false);
+                      navigate(`/complaints?id=${notif.id}`);
+                    }}
                     className={`p-4 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-all group ${
                       !notif.read
                         ? "bg-indigo-50 dark:bg-indigo-900/10 border-l-4 border-l-indigo-600"

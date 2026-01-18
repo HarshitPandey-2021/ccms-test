@@ -138,53 +138,80 @@ const Profile = () => {
   };
 
   // Handle save
-  const handleSave = async () => {
-    if (!validateAll()) {
-      showError('Please fix all errors before saving');
-      return;
+const handleSave = async () => {
+  if (!validateAll()) {
+    showError('Please fix all errors before saving');
+    return;
+  }
+
+  setLoading(true);
+
+  try {
+    const token = localStorage.getItem('token');
+    
+    const updateData = {
+      name: formData.name.trim(),
+      email: formData.email.trim(),
+      phone: formData.phone?.trim() || undefined,
+    };
+
+    // Add password fields if changing password
+    if (formData.newPassword) {
+      updateData.currentPassword = formData.currentPassword;
+      updateData.newPassword = formData.newPassword;
     }
 
-    setLoading(true);
+    console.log('💾 Updating profile:', updateData); // ✅ Debug
 
-    try {
-      const token = localStorage.getItem('token');
-      const updateData = {
-        name: formData.name.trim(),
-        email: formData.email.trim(),
-        phone: formData.phone?.trim() || undefined,
-      };
+    const response = await api.updateProfile(updateData, token);
 
-      // Add password fields if changing password
-      if (formData.newPassword) {
-        updateData.currentPassword = formData.currentPassword;
-        updateData.newPassword = formData.newPassword;
-      }
+    console.log('📥 Response:', response); // ✅ Debug
 
-      const response = await api.updateProfile(updateData, token);
-
-      // Update auth context
-      updateUser(response.user);
-
-      success('Profile updated successfully!');
-      setEditMode(false);
-
-      // Clear password fields
-      setFormData((prev) => ({
-        ...prev,
-        currentPassword: '',
-        newPassword: '',
-        confirmPassword: '',
-      }));
-      setTouched({});
-      setErrors({});
-    } catch (err) {
-      console.error('Update error:', err);
-      showError(err.response?.data?.message || 'Failed to update profile');
-    } finally {
-      setLoading(false);
+    // ✅ UPDATE AUTH CONTEXT
+    if (updateUser) {
+      updateUser(response.user || updateData);
     }
-  };
 
+    // ✅ UPDATE LOCALSTORAGE IMMEDIATELY
+    const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+    const updatedUser = { 
+      ...currentUser, 
+      name: updateData.name,
+      email: updateData.email,
+      phone: updateData.phone 
+    };
+    localStorage.setItem('user', JSON.stringify(updatedUser));
+
+    console.log('✅ Updated user:', updatedUser); // ✅ Debug
+
+    // ✅ FORCE PAGE RE-RENDER
+    window.dispatchEvent(new Event('storage'));
+
+    success('Profile updated successfully!');
+    setEditMode(false);
+
+    // Clear password fields
+    setFormData((prev) => ({
+      ...prev,
+      currentPassword: '',
+      newPassword: '',
+      confirmPassword: '',
+    }));
+    setTouched({});
+    setErrors({});
+
+    // ✅ FORCE REFRESH USER DATA
+    setTimeout(() => {
+      window.location.reload();
+    }, 1000);
+
+  } catch (err) {
+    console.error('❌ Update error:', err);
+    showError(err.response?.data?.message || err.message || 'Failed to update profile');
+  } finally {
+    setLoading(false);
+  }
+};
   // Handle cancel
   const handleCancel = () => {
     setEditMode(false);
@@ -414,21 +441,37 @@ const Profile = () => {
                   </div>
                 )}
 
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                    <RiCalendarLine className="inline h-4 w-4 mr-1" />
-                    Member Since
-                  </label>
-                  <p className="text-base sm:text-lg text-gray-800 dark:text-gray-200 font-medium">
-                    {user?.createdAt
-                      ? new Date(user.createdAt).toLocaleDateString('en-US', {
-                          month: 'long',
-                          day: 'numeric',
-                          year: 'numeric',
-                        })
-                      : 'N/A'}
-                  </p>
-                </div>
+                {/* Member Since - FORCE DISPLAY */}
+<div>
+  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+    <RiCalendarLine className="inline h-4 w-4 mr-1" />
+    Member Since
+  </label>
+  <p className="text-base sm:text-lg text-gray-800 dark:text-gray-200 font-medium">
+    {(() => {
+      console.log('🔍 User object:', user); // ✅ Debug
+      console.log('🔍 createdAt value:', user?.createdAt); // ✅ Debug
+      
+      if (!user?.createdAt) {
+        return 'Date not available';
+      }
+      
+      try {
+        const date = new Date(user.createdAt);
+        console.log('📅 Parsed date:', date); // ✅ Debug
+        
+        return date.toLocaleDateString('en-US', {
+          month: 'long',
+          day: 'numeric',
+          year: 'numeric',
+        });
+      } catch (error) {
+        console.error('❌ Date parsing error:', error);
+        return 'Invalid date';
+      }
+    })()}
+  </p>
+</div>
               </div>
             </div>
 

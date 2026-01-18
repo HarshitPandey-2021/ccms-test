@@ -68,41 +68,50 @@ const ManageStudents = () => {
   };
 
   // Reset student registration
-  const handleReset = async () => {
-    setShowConfirm(false);
-    setLoading(true);
+// src/pages/ManageStudents.jsx - FIX handleReset function
+const handleReset = async () => {
+  setShowConfirm(false);
+  setLoading(true);
 
-    try {
-      const token = localStorage.getItem('adminToken') || localStorage.getItem('ccms-admin-token');
+  try {
+    const token = localStorage.getItem('adminToken') || localStorage.getItem('ccms-admin-token');
 
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/admin/students/reset`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify({ rollNo: rollNo.trim() }),
-        }
-      );
+    console.log('🔧 Resetting student:', rollNo); // ✅ Debug
 
-      const data = await response.json();
-
-      if (data.success) {
-        success(`✅ ${data.message}`);
-        setStudentInfo(null);
-        setRollNo('');
-      } else {
-        showError(data.message || 'Failed to reset student');
+    const response = await fetch(
+      `${import.meta.env.VITE_API_URL}/admin/students/reset`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ rollNo: rollNo.trim() }),
       }
-    } catch (err) {
-      console.error('Reset error:', err);
-      showError('Failed to reset student');
-    } finally {
-      setLoading(false);
+    );
+
+    const data = await response.json();
+
+    console.log('📥 Response:', data); // ✅ Debug
+
+    if (data.success) {
+      success(`✅ ${data.message}`);
+      
+      // ✅ FORCE CLEAR WITH NEW REFERENCE
+      setStudentInfo(() => null); // Using function form forces React to update
+      setRollNo(() => ''); // Using function form forces React to update
+      
+      console.log('✅ UI cleared'); // ✅ Debug
+    } else {
+      showError(data.message || 'Failed to reset student');
     }
-  };
+  } catch (err) {
+    console.error('❌ Reset error:', err);
+    showError('Failed to reset student');
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleKeyPress = (e) => {
     if (e.key === 'Enter' && !searching) {
@@ -356,19 +365,19 @@ const ManageStudents = () => {
         </div>
       </div>
 
-      {/* Confirm Dialog */}
-      <ConfirmDialog
-        isOpen={showConfirm}
-        onClose={() => setShowConfirm(false)}
-        onConfirm={handleReset}
-        title="Reset Student Registration?"
-        message={`Are you sure you want to reset ${studentInfo?.name}? This will permanently delete their account and all associated data. This action cannot be undone.`}
-        confirmText="Yes, Reset Student"
-        cancelText="Cancel"
-        type="danger"
-      />
-    </div>
-  );
-};
+        {/* Confirm Dialog */}
+        <ConfirmDialog
+            isOpen={showConfirm}
+            onClose={() => setShowConfirm(false)}
+            onConfirm={handleReset}
+            title="Reset Student Registration?"
+            message={`Are you sure you want to reset ${studentInfo?.name}? This will permanently delete their account and all associated data. This action cannot be undone.`}
+            confirmText="Yes, Reset Student"
+            cancelText="Cancel"
+            type="danger"
+        />
+        </div>
+    );
+    };
 
-export default ManageStudents;
+    export default ManageStudents;

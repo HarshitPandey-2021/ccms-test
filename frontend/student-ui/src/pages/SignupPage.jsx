@@ -1,13 +1,39 @@
-// src/pages/SignupPage.jsx - WITH WHITELIST + OTP VERIFICATION
+// src/pages/SignupPage.jsx - COMPLETE WITH ALL FIXES
 
 import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { requestRegistrationOTP, verifyOTPAndRegister, resendOTP } from "../api.js";
 
+// Helper function for personalized greeting
+const getStudentGreeting = (rollNo, studentName, batch) => {
+  const year = rollNo.substring(0, 2);
+  const endYear = batch.split('-')[1];
+  const firstName = studentName.split(' ')[0];
+  
+  let batchType = '';
+  let emoji = '';
+  
+  if (year === '22') {
+    batchType = 'senior';
+    emoji = '📚';
+  } else if (year === '23') {
+    batchType = '';
+    emoji = '🎓';
+  } else if (year === '24') {
+    batchType = 'lateral entry';
+    emoji = '🚀';
+  }
+  
+  const greeting = batchType 
+    ? `Let me guess... You're ${firstName}, ${batchType} student from B.Tech AI ${endYear} batch? ${emoji}`
+    : `Let me guess... You're ${firstName} from B.Tech AI ${endYear} batch? ${emoji}`;
+    
+  return greeting;
+};
+
 export default function SignupPage() {
   const navigate = useNavigate();
   
-  // Steps: 1 = Form, 2 = OTP Verification
   const [step, setStep] = useState(1);
   
   const [form, setForm] = useState({
@@ -18,10 +44,7 @@ export default function SignupPage() {
     phone: "",
   });
   
-  // Student info from whitelist (received after roll verification)
   const [studentInfo, setStudentInfo] = useState(null);
-  
-  // OTP State
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const otpRefs = useRef([]);
   
@@ -29,8 +52,6 @@ export default function SignupPage() {
   const [errorDetails, setErrorDetails] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
-  
-  // Resend timer
   const [resendTimer, setResendTimer] = useState(0);
   
   // Countdown effect
@@ -51,7 +72,6 @@ export default function SignupPage() {
     setErrorDetails("");
   }
 
-  // OTP Input Handlers
   function handleOtpChange(index, value) {
     if (value && !/^\d$/.test(value)) return;
     
@@ -60,7 +80,6 @@ export default function SignupPage() {
     setOtp(newOtp);
     setError("");
 
-    // Auto-focus next
     if (value && index < 5) {
       otpRefs.current[index + 1]?.focus();
     }
@@ -86,14 +105,12 @@ export default function SignupPage() {
     return regex.test(pwd);
   }
 
-  // Step 1: Verify Roll Number & Request OTP
   async function handleRequestOTP(e) {
     e.preventDefault();
     setError("");
     setErrorDetails("");
     setSuccess("");
 
-    // Validation
     if (!form.roll.trim()) {
       return setError("Roll number is required");
     }
@@ -113,11 +130,10 @@ export default function SignupPage() {
     try {
       const response = await requestRegistrationOTP(
         form.email.trim(), 
-        "", // Name comes from whitelist now
+        "",
         form.roll.trim()
       );
       
-      // Save student info from response
       setStudentInfo({
         name: response.studentName,
         greeting: response.greeting,
@@ -125,28 +141,20 @@ export default function SignupPage() {
         batch: response.batch,
       });
       
-     setSuccess(
-  `📧 Verification code sent to ${form.email}!`
-);
-
-// And ADD this helper text below the OTP input boxes:
-<p className="text-center text-xs text-gray-600 dark:text-gray-400 mt-3">
-  Can't find the email? Check your spam folder 🕵️
-  <br />
-  <span className="text-indigo-600 dark:text-indigo-400">
-    (OTPs love playing hide and seek! 🙈)
-  </span>
-</p>
-
-
-
+      // ✅ Show personalized greeting
+      const customGreeting = getStudentGreeting(
+        form.roll.trim(), 
+        response.studentName, 
+        response.batch
+      );
+      
+      setSuccess(customGreeting);
       setStep(2);
       setResendTimer(60);
     } catch (err) {
       setError(err.message || "Failed to verify roll number");
       setErrorDetails(err.details || "");
       
-      // Special handling for already registered
       if (err.errorType === "ALREADY_REGISTERED" && err.registeredEmail) {
         setErrorDetails(`${err.details}\n${err.registeredEmail}`);
       }
@@ -155,7 +163,6 @@ export default function SignupPage() {
     }
   }
 
-  // Step 2: Verify OTP & Register
   async function handleVerifyOTP(e) {
     e.preventDefault();
     setError("");
@@ -175,18 +182,15 @@ export default function SignupPage() {
         phone: form.phone.trim() || null,
       });
 
-      // Save tokens
       localStorage.setItem("token", response.token);
       if (response.refreshToken) {
         localStorage.setItem("refreshToken", response.refreshToken);
       }
       localStorage.setItem("user", JSON.stringify(response.user));
 
-      setSuccess(response.message || "Account created successfully!");
+      setSuccess(response.message || "Account created successfully! 🎉");
       
-      // Show success for a moment then redirect
       setTimeout(() => {
-        // Redirect to student dashboard
         const USER_APP_URL = import.meta.env.VITE_STUDENT_URL || "http://localhost:3001";
         
         const payload = {
@@ -209,7 +213,6 @@ export default function SignupPage() {
     }
   }
 
-  // Resend OTP
   async function handleResendOTP() {
     if (resendTimer > 0) return;
     
@@ -232,7 +235,6 @@ export default function SignupPage() {
     }
   }
 
-  // Go back to form
   function handleBackToForm() {
     setStep(1);
     setOtp(["", "", "", "", "", ""]);
@@ -269,12 +271,11 @@ export default function SignupPage() {
           {step === 1 ? "Student Registration" : "Verify Email"}
         </h2>
         
-        {/* Subtitle based on step */}
         {step === 1 && (
-  <p className="text-center text-gray-600 text-sm mb-4">
-    For University of Lucknow students only
-  </p>
-)}
+          <p className="text-center text-gray-600 text-sm mb-4">
+            For University of Lucknow students only
+          </p>
+        )}
         
         {step === 2 && studentInfo && (
           <div className="text-center mb-4">
@@ -309,18 +310,17 @@ export default function SignupPage() {
           </div>
         )}
 
-        {/* ==================== STEP 1: REGISTRATION FORM ==================== */}
+        {/* STEP 1: REGISTRATION FORM */}
         {step === 1 && (
           <form onSubmit={handleRequestOTP} className="space-y-4 text-gray-800">
             
-            {/* Roll Number - FIRST and REQUIRED */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Roll Number <span className="text-red-500">*</span>
               </label>
               <input
                 name="roll"
-                placeholder="e.g., 2310013155001"
+                placeholder="e.g., 2310013155037"
                 className="w-full border border-gray-300 px-4 py-3 rounded-lg focus:ring-2 focus:ring-[#c026d3] focus:border-transparent outline-none transition-all font-mono"
                 onChange={handleChange}
                 value={form.roll}
@@ -332,7 +332,6 @@ export default function SignupPage() {
               </p>
             </div>
 
-            {/* Email */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Email <span className="text-red-500">*</span>
@@ -348,7 +347,6 @@ export default function SignupPage() {
               />
             </div>
 
-            {/* Phone (Optional) */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Phone Number <span className="text-gray-400">(Optional)</span>
@@ -363,7 +361,6 @@ export default function SignupPage() {
               />
             </div>
 
-            {/* Password */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Password <span className="text-red-500">*</span>
@@ -382,7 +379,6 @@ export default function SignupPage() {
               </p>
             </div>
 
-            {/* Confirm Password */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Confirm Password <span className="text-red-500">*</span>
@@ -398,7 +394,6 @@ export default function SignupPage() {
               />
             </div>
 
-            {/* Submit Button */}
             <button
               type="submit"
               disabled={loading}
@@ -433,11 +428,10 @@ export default function SignupPage() {
           </form>
         )}
 
-        {/* ==================== STEP 2: OTP VERIFICATION ==================== */}
+        {/* STEP 2: OTP VERIFICATION */}
         {step === 2 && (
           <form onSubmit={handleVerifyOTP} className="space-y-6">
             
-            {/* Verified Badge */}
             <div className="text-center">
               <div 
                 className="inline-flex items-center justify-center w-20 h-20 rounded-full mb-2"
@@ -480,6 +474,14 @@ export default function SignupPage() {
                   autoFocus={index === 0}
                 />
               ))}
+            </div>
+
+            {/* ✅ Simple Spam Folder Hint */}
+            <div className="text-center">
+              <p className="text-xs text-gray-600">
+                📬 Check your inbox{" "}
+                <span className="text-orange-600 font-medium">(and spam folder! 🙈)</span>
+              </p>
             </div>
 
             {/* Timer & Resend */}
@@ -540,10 +542,10 @@ export default function SignupPage() {
 
         {/* Footer */}
         <div className="mt-6 pt-4 border-t border-gray-200">
-  <p className="text-center text-xs text-gray-500">
-    Having trouble? Contact your Class Representative
-  </p>
-</div>
+          <p className="text-center text-xs text-gray-500">
+            Having trouble? Contact your Class Representative
+          </p>
+        </div>
       </div>
     </div>
   );

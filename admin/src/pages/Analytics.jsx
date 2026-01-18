@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Charts from "../components/Charts";
 import Loading from "../components/Loading";
-import { getStats } from "../api";
+// import { getStats } from "../api";
 import { getAdminToken } from "../utils/tokenUtils";
 import { getStats, getTrends } from "../api"; // ✅ Add getTrends import
 import {
