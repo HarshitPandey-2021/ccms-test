@@ -1,4 +1,5 @@
-// admin/src/components/Sidebar.jsx - WITH STUDENT MANAGEMENT
+// admin/src/components/Sidebar.jsx - FIXED MOBILE POSITIONING
+
 import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
@@ -9,7 +10,7 @@ import {
   RiUserLine,
   RiLogoutBoxLine,
   RiCloseLine,
-  RiTeamLine, // ✅ NEW ICON for Students
+  RiTeamLine,
 } from 'react-icons/ri';
 import { getAdminUser, logoutAdmin } from '../utils/tokenUtils';
 import { useToast } from '../hooks/useToast';
@@ -32,6 +33,18 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Prevent body scroll when mobile sidebar is open
+  useEffect(() => {
+    if (isMobile && isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isMobile, isOpen]);
+
   const handleLogoutClick = () => {
     setShowLogoutDialog(true);
   };
@@ -51,38 +64,41 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
     { path: '/dashboard', label: 'Dashboard', icon: RiDashboardLine },
     { path: '/complaints', label: 'Complaints', icon: RiFileListLine },
     { path: '/analytics', label: 'Analytics', icon: RiBarChartLine },
-    { path: '/students', label: 'Students', icon: RiTeamLine }, // ✅ NEW
+    { path: '/students', label: 'Students', icon: RiTeamLine },
     { path: '/activity-logs', label: 'Activity Logs', icon: RiHistoryLine },
     { path: '/profile', label: 'Profile', icon: RiUserLine },
   ];
 
   return (
     <>
-      {/* Mobile Backdrop */}
+      {/* Mobile Backdrop - z-40 (below sidebar) */}
       {isMobile && isOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 md:hidden"
           onClick={toggleSidebar}
+          aria-hidden="true"
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar - z-50 on mobile (above navbar when open) */}
       <aside
         className={`
           fixed md:static 
-          top-0 left-0 z-40 
-          w-64 h-full
+          inset-y-0 left-0
+          z-50 md:z-30
+          w-64 
           bg-white dark:bg-gray-800 
           shadow-xl md:shadow-none
           transform transition-transform duration-300 ease-in-out
           ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
           flex flex-col
+          pt-0 md:pt-0
         `}
       >
-        {/* Logo/Header */}
-        <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+        {/* Logo/Header - Visible on mobile when sidebar is open */}
+        <div className="flex-shrink-0 p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
           <div className="flex items-center justify-between">
-            <div>
+            <div className="min-w-0 flex-1">
               <h1 className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
                 Admin Panel
               </h1>
@@ -94,7 +110,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
             {isMobile && (
               <button
                 onClick={toggleSidebar}
-                className="md:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                className="flex-shrink-0 ml-2 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                 aria-label="Close menu"
               >
                 <RiCloseLine className="h-6 w-6 text-gray-600 dark:text-gray-400" />
@@ -103,8 +119,8 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
           </div>
         </div>
 
-        {/* Navigation Links */}
-        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+        {/* Navigation Links - Scrollable area with proper padding */}
+        <nav className="flex-1 p-4 space-y-2 overflow-y-auto overscroll-contain">
           {navItems.map((item) => {
             const Icon = item.icon;
             return (
@@ -115,15 +131,15 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                 className={({ isActive }) =>
                   `flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-all ${
                     isActive
-                      ? 'bg-indigo-600 text-white shadow-md scale-105'
-                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                      ? 'bg-indigo-600 text-white shadow-md'
+                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 active:bg-gray-200 dark:active:bg-gray-600'
                   }`
                 }
               >
                 {({ isActive }) => (
                   <>
-                    <Icon className={`h-5 w-5 ${isActive ? 'scale-110' : ''}`} />
-                    <span>{item.label}</span>
+                    <Icon className={`h-5 w-5 flex-shrink-0 ${isActive ? 'scale-110' : ''}`} />
+                    <span className="truncate">{item.label}</span>
                   </>
                 )}
               </NavLink>
@@ -132,18 +148,18 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
         </nav>
 
         {/* Logout Button */}
-        <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+        <div className="flex-shrink-0 p-4 border-t border-gray-200 dark:border-gray-700">
           <button
             onClick={handleLogoutClick}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all active:scale-95"
           >
-            <RiLogoutBoxLine className="h-5 w-5" />
+            <RiLogoutBoxLine className="h-5 w-5 flex-shrink-0" />
             <span>Logout</span>
           </button>
         </div>
 
         {/* Sidebar Footer */}
-        <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+        <div className="flex-shrink-0 p-4 pb-20 md:pb-4 border-t border-gray-200 dark:border-gray-700">
           <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
             <p className="text-xs text-gray-600 dark:text-gray-400 text-center font-medium">
               CCMS v1.0.0

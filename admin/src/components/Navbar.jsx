@@ -1,4 +1,5 @@
-// admin/src/components/Navbar.jsx - WITH CONFIRM DIALOG
+// admin/src/components/Navbar.jsx - FIXED Z-INDEX
+
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { RiMenuFoldLine, RiLogoutBoxRLine, RiShieldUserLine } from "react-icons/ri";
@@ -25,7 +26,8 @@ const Navbar = ({ toggleSidebar }) => {
 
   return (
     <>
-      <nav className="sticky top-0 z-50 w-full bg-gradient-to-r from-indigo-700 to-indigo-800 dark:from-gray-900 dark:to-gray-800 text-white shadow-lg">
+      {/* ✅ Changed z-50 to z-40, sidebar will be z-50 when open */}
+      <nav className="sticky top-0 z-40 w-full bg-gradient-to-r from-indigo-700 to-indigo-800 dark:from-gray-900 dark:to-gray-800 text-white shadow-lg">
         <div className="mx-auto flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
           {/* Left Side - Menu + Branding */}
           <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">

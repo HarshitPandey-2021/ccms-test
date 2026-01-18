@@ -1,8 +1,9 @@
-// backend/src/routes/users.js - UPDATED WITH OTP ROUTES
+// backend/src/routes/users.js - ADD CHANGE PASSWORD ROUTE
+
 const express = require("express");
 const router = express.Router();
 const usersController = require("../controllers/usersController");
-const { protect } = require("../middlewares/authMiddleware"); // If you have auth middleware
+const { protect } = require("../middlewares/authMiddleware");
 
 // ============================================
 // PUBLIC ROUTES (No Authentication)
@@ -27,13 +28,16 @@ router.post("/refresh", usersController.refreshToken);
 // PROTECTED ROUTES (Require Authentication)
 // ============================================
 
-// ✅ Get user profile (if you have this)
+// ✅ Get user profile
 router.get("/profile", protect, usersController.getProfile);
 
-// ✅ Update user profile (if you have this)
+// ✅ Update user profile
 router.put("/profile", protect, usersController.updateProfile);
 
-// ✅ Get user stats (if you have this)
+// ✅ Get user stats
 router.get("/profile/stats", protect, usersController.getUserStats);
+
+// ✅ NEW: Change Password Route
+router.put("/profile/change-password", protect, usersController.changePassword);
 
 module.exports = router;

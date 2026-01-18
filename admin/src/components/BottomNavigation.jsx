@@ -1,4 +1,4 @@
-// admin/src/components/BottomNavigation.jsx - FIXED (5 items max)
+// admin/src/components/BottomNavigation.jsx - FIXED Z-INDEX
 
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -14,7 +14,6 @@ export default function BottomNavigation() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // ✅ ONLY 5 ITEMS (removed Activity Logs from mobile nav)
   const navItems = [
     { path: '/dashboard', icon: RiDashboardLine, label: 'Home' },
     { path: '/complaints', icon: RiFileListLine, label: 'Cases' },
@@ -31,8 +30,9 @@ export default function BottomNavigation() {
   };
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 z-50 shadow-lg">
-      <div className="flex justify-around items-center h-16">
+    // ✅ Changed z-50 to z-30 (below sidebar z-50)
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 z-30 shadow-lg safe-area-bottom">
+      <div className="flex justify-around items-center h-16 px-1">
         {navItems.map(({ path, icon: Icon, label }) => {
           const active = isActive(path);
           return (

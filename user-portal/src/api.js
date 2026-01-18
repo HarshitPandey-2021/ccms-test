@@ -134,7 +134,9 @@ export async function updateProfile(data) {
   return handleResponse(res);
 }
 
-export async function changePassword(currentPassword, newPassword) {
+// user-portal/src/api.js - FIXED changePassword function
+
+export async function changePassword(passwordData) {
   try {
     let token = localStorage.getItem("token");
     if (isTokenExpired(token)) {
@@ -142,13 +144,14 @@ export async function changePassword(currentPassword, newPassword) {
       if (!token) throw new Error("Authentication failed");
     }
 
-    const res = await fetch(`${API_BASE}/auth/change-password`, {
+    // ✅ Changed endpoint to match backend
+    const res = await fetch(`${API_BASE}/profile/change-password`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ currentPassword, newPassword }),
+      body: JSON.stringify(passwordData),
     });
 
     return handleResponse(res);
