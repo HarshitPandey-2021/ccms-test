@@ -1,4 +1,4 @@
-// src/context/AuthContext.jsx - COMPLETE
+// src/context/AuthContext.jsx - LANDING PAGE (FIXED)
 import { createContext, useContext, useState } from "react";
 
 const AuthContext = createContext(null);
@@ -9,7 +9,6 @@ export function AuthProvider({ children }) {
   const login = (data) => {
     setUser(data);
     
-    // ✅ If admin login, save to localStorage properly
     if (data?.user?.role === "admin" && data?.token) {
       console.log("🔑 AuthContext: Saving admin session to localStorage");
       
@@ -20,7 +19,6 @@ export function AuthProvider({ children }) {
         userId: data.user._id || data.user.id,
       };
 
-      // Save in multiple keys for compatibility
       localStorage.setItem("adminToken", data.token);
       localStorage.setItem("ccms-admin-token", data.token);
       localStorage.setItem("ccms-admin-session", JSON.stringify(cleanUser));
@@ -28,32 +26,39 @@ export function AuthProvider({ children }) {
       localStorage.setItem("adminProfile", JSON.stringify(cleanUser));
       localStorage.setItem("user", JSON.stringify(cleanUser));
       
-      // Save refresh token if available
       if (data.refreshToken) {
         localStorage.setItem("adminRefreshToken", data.refreshToken);
-        console.log("✅ Refresh token saved");
       }
       
-      console.log("✅ Admin session saved to localStorage");
+      console.log("✅ Admin session saved");
     }
   };
 
   const logout = () => {
     setUser(null);
     
-    // Clear admin session from localStorage
-    localStorage.removeItem("adminToken");
-    localStorage.removeItem("ccms-admin-token");
-    localStorage.removeItem("token");
-    localStorage.removeItem("authToken");
-    localStorage.removeItem("ccms-admin-session");
-    localStorage.removeItem("adminUser");
-    localStorage.removeItem("adminProfile");
-    localStorage.removeItem("user");
-    localStorage.removeItem("profile");
-    localStorage.removeItem("adminRefreshToken");
+    // ✅ Clear ALL possible storage keys
+    const keysToRemove = [
+      "adminToken",
+      "ccms-admin-token",
+      "token",
+      "authToken",
+      "ccms-admin-session",
+      "adminUser",
+      "adminProfile",
+      "user",
+      "profile",
+      "adminRefreshToken",
+      "refreshToken",
+    ];
     
-    console.log("🚪 AuthContext: Admin session cleared");
+    keysToRemove.forEach(key => localStorage.removeItem(key));
+    sessionStorage.clear();
+    
+    console.log("🚪 AuthContext: Session cleared");
+    
+    // ✅ Use replace to prevent back navigation
+    window.location.replace("/login");
   };
 
   const signup = (data) => {

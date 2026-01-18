@@ -46,8 +46,8 @@ const PORT = process.env.PORT || 4000;
 const uri = process.env.MONGODB_URI;
 const dbName = process.env.DB_NAME;
 
-// ✅ UPDATED: Added OTPs collection
-let db, Users, Complaints, AdminLogs, Departments, OTPs;
+// ✅ UPDATED: Added OTPs and AllowedStudents collections
+let db, Users, Complaints, AdminLogs, Departments, OTPs, AllowedStudents;
 
 // ---------- CLOUDINARY ----------
 cloudinary.config({
@@ -322,8 +322,9 @@ async function start() {
   Complaints = db.collection("Complaints");
   AdminLogs = db.collection("AdminLogs");
   Departments = db.collection("Departments");
-  OTPs = db.collection("OTPs"); // ✅ NEW: OTP Collection
 
+ OTPs = db.collection("OTPs");
+AllowedStudents = db.collection("AllowedStudents"); // ✅ NEW: Whitelist Collection
   await Users.createIndex({ email: 1 }, { unique: true });
   await Departments.createIndex({ name: 1 }, { unique: true });
   await Complaints.createIndex({ userId: 1 });
@@ -335,6 +336,9 @@ async function start() {
   // ✅ NEW: OTP Indexes
   await OTPs.createIndex({ email: 1 });
   await OTPs.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }); // Auto-delete expired OTPs
+  // ✅ NEW: AllowedStudents Indexes
+await AllowedStudents.createIndex({ rollNo: 1 }, { unique: true });
+await AllowedStudents.createIndex({ isRegistered: 1 });
 
   console.log("✅ MongoDB connected. DB:", dbName);
   app.listen(PORT, () => console.log(`🚀 Server: http://localhost:${PORT}`));
@@ -418,34 +422,169 @@ app.get("/api/files/pdf/:publicId", async (req, res) => {
 // ============================================
 
 // ✅ FIXED: Request OTP for Registration
+// app.post("/api/auth/register/request-otp", async (req, res) => {
+//   try {
+//     const { email, name } = req.body;
+
+//     // Validation
+//     if (!email || !name) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Email and name are required",
+//       });
+//     }
+
+//     const normalizedEmail = email.toLowerCase().trim();
+
+//     // Check if user already exists
+//     const existingUser = await Users.findOne({ email: normalizedEmail });
+//     if (existingUser) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Email already registered. Please login instead.",
+//       });
+//     }
+
+//     // ✅ FIX 1: Force delete ALL old OTPs for this email (even expired ones)
+//     const deleteResult = await OTPs.deleteMany({ email: normalizedEmail });
+//     console.log(`🗑️ Deleted ${deleteResult.deletedCount} old OTPs for ${normalizedEmail}`);
+
+//     // ✅ FIX 2: Generate FRESH OTP with timestamp to ensure uniqueness
+//     const otp = otpGenerator.generate(6, {
+//       digits: true,
+//       upperCaseAlphabets: false,
+//       lowerCaseAlphabets: false,
+//       specialChars: false,
+//     });
+
+//     const now = new Date();
+//     const expiresAt = new Date(now.getTime() + 10 * 60 * 1000); // 10 minutes
+
+//     console.log(`📧 Generated NEW OTP for ${normalizedEmail}: ${otp} at ${now.toISOString()}`);
+
+//     // ✅ FIX 3: Insert new OTP with proper fields
+//     await OTPs.insertOne({
+//       email: normalizedEmail,
+//       otp: otp,
+//       name: name.trim(),
+//       verified: false,
+//       createdAt: now,
+//       expiresAt: expiresAt,
+//     });
+
+//     // ✅ FIX 4: Verify OTP was saved
+//     const savedOTP = await OTPs.findOne({ email: normalizedEmail, verified: false });
+//     console.log(`✅ Saved OTP in DB: ${savedOTP?.otp} (should match ${otp})`);
+
+//     // Send OTP email
+//     await sendOTPEmail(normalizedEmail, otp, name);
+
+//     res.status(200).json({
+//       success: true,
+//       message: `Verification code sent to ${normalizedEmail}`,
+//       expiresIn: 600, // 10 minutes in seconds
+//     });
+//   } catch (error) {
+//     console.error("❌ Request OTP error:", error);
+//     res.status(500).json({
+//       success: false,
+//       message: "Failed to send verification code. Please try again.",
+//       error: error.message,
+//     });
+//   }
+// });
+
+// ============================================
+// ✅ WHITELIST-BASED REGISTRATION WITH OTP
+// ============================================
+
+// Helper: Get student-friendly batch message
+function getWelcomeMessage(student) {
+  const firstName = student.name.split(" ")[0];
+  const year = student.rollNo.substring(0, 2);
+  
+  if (year === "22") {
+    return {
+      greeting: `Welcome back, ${firstName}! 📚`,
+      subtitle: "Great to see a senior here. Your experience matters!",
+    };
+  } else if (year === "23") {
+    return {
+      greeting: `Hey ${firstName}! 🎓`,
+      subtitle: `You're part of the ${student.batch} batch. Let's make our campus better!`,
+    };
+  } else if (year === "24") {
+    return {
+      greeting: `Welcome aboard, ${firstName}! 🚀`,
+      subtitle: "Glad to have you in the AI family. Your fresh perspective counts!",
+    };
+  }
+  
+  return {
+    greeting: `Welcome, ${firstName}! 👋`,
+    subtitle: "You're verified as a University of Lucknow student.",
+  };
+}
+
+// Step 1: Verify Roll Number & Request OTP
 app.post("/api/auth/register/request-otp", async (req, res) => {
   try {
-    const { email, name } = req.body;
+    const { email, name, rollNo } = req.body;
 
     // Validation
-    if (!email || !name) {
+    if (!email || !rollNo) {
       return res.status(400).json({
         success: false,
-        message: "Email and name are required",
+        message: "Email and Roll Number are required",
       });
     }
 
     const normalizedEmail = email.toLowerCase().trim();
+    const normalizedRollNo = rollNo.trim();
 
-    // Check if user already exists
+    // ✅ STEP 1: Check if roll number exists in whitelist
+    const allowedStudent = await AllowedStudents.findOne({ 
+      rollNo: normalizedRollNo 
+    });
+
+    if (!allowedStudent) {
+      console.log(`❌ Roll number not in whitelist: ${normalizedRollNo}`);
+      return res.status(403).json({
+        success: false,
+        errorType: "ROLL_NOT_FOUND",
+        message: "Roll number not found in our records",
+        details: "This portal is exclusively for B.Tech AI students of University of Lucknow. If you believe this is a mistake, please contact your Class Representative.",
+      });
+    }
+
+    // ✅ STEP 2: Check if already registered
+    if (allowedStudent.isRegistered) {
+      console.log(`⚠️ Roll number already registered: ${normalizedRollNo}`);
+      return res.status(400).json({
+        success: false,
+        errorType: "ALREADY_REGISTERED",
+        message: `Hey ${allowedStudent.name.split(" ")[0]}! You're already registered.`,
+        details: "This roll number has an existing account. Try logging in instead.",
+        registeredEmail: allowedStudent.registeredEmail 
+          ? `Registered with: ${allowedStudent.registeredEmail.substring(0, 3)}***` 
+          : null,
+      });
+    }
+
+    // ✅ STEP 3: Check if email already used by someone else
     const existingUser = await Users.findOne({ email: normalizedEmail });
     if (existingUser) {
       return res.status(400).json({
         success: false,
-        message: "Email already registered. Please login instead.",
+        errorType: "EMAIL_EXISTS",
+        message: "This email is already registered with another account.",
+        details: "Please use a different email address or try logging in.",
       });
     }
 
-    // ✅ FIX 1: Force delete ALL old OTPs for this email (even expired ones)
-    const deleteResult = await OTPs.deleteMany({ email: normalizedEmail });
-    console.log(`🗑️ Deleted ${deleteResult.deletedCount} old OTPs for ${normalizedEmail}`);
+    // ✅ STEP 4: Delete old OTPs and generate new one
+    await OTPs.deleteMany({ email: normalizedEmail });
 
-    // ✅ FIX 2: Generate FRESH OTP with timestamp to ensure uniqueness
     const otp = otpGenerator.generate(6, {
       digits: true,
       upperCaseAlphabets: false,
@@ -456,55 +595,182 @@ app.post("/api/auth/register/request-otp", async (req, res) => {
     const now = new Date();
     const expiresAt = new Date(now.getTime() + 10 * 60 * 1000); // 10 minutes
 
-    console.log(`📧 Generated NEW OTP for ${normalizedEmail}: ${otp} at ${now.toISOString()}`);
+    console.log(`📧 Generated OTP for ${allowedStudent.name}: ${otp}`);
 
-    // ✅ FIX 3: Insert new OTP with proper fields
+    // Save OTP with student info
     await OTPs.insertOne({
       email: normalizedEmail,
       otp: otp,
-      name: name.trim(),
+      rollNo: normalizedRollNo,
+      name: allowedStudent.name, // Use name from whitelist
       verified: false,
       createdAt: now,
       expiresAt: expiresAt,
     });
 
-    // ✅ FIX 4: Verify OTP was saved
-    const savedOTP = await OTPs.findOne({ email: normalizedEmail, verified: false });
-    console.log(`✅ Saved OTP in DB: ${savedOTP?.otp} (should match ${otp})`);
+    // ✅ STEP 5: Send personalized OTP email
+    await sendOTPEmail(normalizedEmail, otp, allowedStudent.name);
 
-    // Send OTP email
-    await sendOTPEmail(normalizedEmail, otp, name);
+    // Get personalized welcome message
+    const welcomeMsg = getWelcomeMessage(allowedStudent);
 
     res.status(200).json({
       success: true,
       message: `Verification code sent to ${normalizedEmail}`,
+      studentName: allowedStudent.name,
+      greeting: welcomeMsg.greeting,
+      subtitle: welcomeMsg.subtitle,
+      batch: allowedStudent.batch,
       expiresIn: 600, // 10 minutes in seconds
     });
   } catch (error) {
     console.error("❌ Request OTP error:", error);
     res.status(500).json({
       success: false,
-      message: "Failed to send verification code. Please try again.",
+      message: "Something went wrong. Please try again.",
       error: error.message,
     });
   }
 });
+
+
+// Step 2: Verify OTP and Complete Registration
+// app.post("/api/auth/register/verify-otp", async (req, res) => {
+//   try {
+//     const { email, otp, name, password, roll, rollNo, phone } = req.body;
+
+//     // Validation
+//     if (!email || !otp || !name || !password) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Email, OTP, name, and password are required",
+//       });
+//     }
+
+//     const normalizedEmail = email.toLowerCase().trim();
+
+//     // Find valid OTP
+//     const otpDoc = await OTPs.findOne({
+//       email: normalizedEmail,
+//       otp: otp.trim(),
+//       verified: false,
+//       expiresAt: { $gt: new Date() },
+//     });
+
+//     if (!otpDoc) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Invalid or expired verification code. Please request a new one.",
+//       });
+//     }
+
+//     // Check if user already exists (double check)
+//     const existingUser = await Users.findOne({ email: normalizedEmail });
+//     if (existingUser) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Email already registered",
+//       });
+//     }
+
+//     // Hash password
+//     const hashedPassword = await bcrypt.hash(password, 10);
+
+//     // Determine role and roll number
+//     const userRoll = roll || rollNo || null;
+//     const userRole = userRoll ? "student" : "student"; // Default to student
+
+//     // Create user
+//     const now = new Date();
+//     const newUser = {
+//       name: name.trim(),
+//       email: normalizedEmail,
+//       password: hashedPassword,
+//       phone: phone?.trim() || null,
+//       roll: userRoll,
+//       role: userRole,
+//       emailVerified: true,
+//       createdAt: now,
+//       updatedAt: now,
+//     };
+
+//     const result = await Users.insertOne(newUser);
+//     const userId = result.insertedId.toString();
+
+//     console.log("✅ User registered with OTP:", normalizedEmail);
+
+//     // Mark OTP as verified
+//     await OTPs.updateOne(
+//       { _id: otpDoc._id },
+//       { $set: { verified: true } }
+//     );
+
+//     // Send welcome email (non-blocking)
+//     sendWelcomeEmail({ ...newUser, _id: result.insertedId }).catch((err) =>
+//       console.error("Welcome email failed:", err)
+//     );
+
+//     // Generate tokens
+//     const payload = { userId, email: normalizedEmail, role: userRole };
+
+//     const accessToken = jwt.sign(payload, process.env.JWT_SECRET, {
+//       expiresIn: process.env.JWT_EXPIRES_IN || "24h",
+//     });
+
+//     const refreshToken = jwt.sign(
+//       { ...payload, type: "refresh" },
+//       process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
+//       { expiresIn: "30d" }
+//     );
+
+//     res.status(201).json({
+//       success: true,
+//       message: "Registration successful! Welcome to CCMS.",
+//       token: accessToken,
+//       refreshToken: refreshToken,
+//       user: {
+//         id: userId,
+//         _id: userId,
+//         name: newUser.name,
+//         email: newUser.email,
+//         phone: newUser.phone,
+//         roll: newUser.roll,
+//         role: newUser.role,
+//       },
+//     });
+//   } catch (error) {
+//     console.error("❌ Verify OTP error:", error);
+//     res.status(500).json({
+//       success: false,
+//       message: "Registration failed. Please try again.",
+//       error: error.message,
+//     });
+//   }
+// });
+
 // Step 2: Verify OTP and Complete Registration
 app.post("/api/auth/register/verify-otp", async (req, res) => {
   try {
-    const { email, otp, name, password, roll, rollNo, phone } = req.body;
+    const { email, otp, password, phone } = req.body;
 
     // Validation
-    if (!email || !otp || !name || !password) {
+    if (!email || !otp || !password) {
       return res.status(400).json({
         success: false,
-        message: "Email, OTP, name, and password are required",
+        message: "Email, OTP, and password are required",
+      });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must be at least 6 characters",
       });
     }
 
     const normalizedEmail = email.toLowerCase().trim();
 
-    // Find valid OTP
+    // ✅ STEP 1: Find valid OTP
     const otpDoc = await OTPs.findOne({
       email: normalizedEmail,
       otp: otp.trim(),
@@ -513,13 +779,48 @@ app.post("/api/auth/register/verify-otp", async (req, res) => {
     });
 
     if (!otpDoc) {
+      // Check if OTP exists but expired
+      const expiredOtp = await OTPs.findOne({
+        email: normalizedEmail,
+        otp: otp.trim(),
+      });
+
+      if (expiredOtp) {
+        return res.status(400).json({
+          success: false,
+          errorType: "OTP_EXPIRED",
+          message: "This code has expired. Please request a new one.",
+        });
+      }
+
       return res.status(400).json({
         success: false,
-        message: "Invalid or expired verification code. Please request a new one.",
+        errorType: "INVALID_OTP",
+        message: "Invalid verification code. Please check and try again.",
       });
     }
 
-    // Check if user already exists (double check)
+    // ✅ STEP 2: Get student info from whitelist
+    const allowedStudent = await AllowedStudents.findOne({ 
+      rollNo: otpDoc.rollNo 
+    });
+
+    if (!allowedStudent) {
+      return res.status(400).json({
+        success: false,
+        message: "Student record not found. Please contact support.",
+      });
+    }
+
+    // Double check not already registered
+    if (allowedStudent.isRegistered) {
+      return res.status(400).json({
+        success: false,
+        message: "This roll number is already registered.",
+      });
+    }
+
+    // ✅ STEP 3: Check email not already used
     const existingUser = await Users.findOne({ email: normalizedEmail });
     if (existingUser) {
       return res.status(400).json({
@@ -528,22 +829,19 @@ app.post("/api/auth/register/verify-otp", async (req, res) => {
       });
     }
 
-    // Hash password
+    // ✅ STEP 4: Hash password and create user
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Determine role and roll number
-    const userRoll = roll || rollNo || null;
-    const userRole = userRoll ? "student" : "student"; // Default to student
-
-    // Create user
     const now = new Date();
     const newUser = {
-      name: name.trim(),
+      name: allowedStudent.name, // Use official name from whitelist
       email: normalizedEmail,
       password: hashedPassword,
       phone: phone?.trim() || null,
-      roll: userRoll,
-      role: userRole,
+      roll: otpDoc.rollNo,
+      rollNo: otpDoc.rollNo,
+      batch: allowedStudent.batch,
+      role: "student",
       emailVerified: true,
       createdAt: now,
       updatedAt: now,
@@ -552,21 +850,34 @@ app.post("/api/auth/register/verify-otp", async (req, res) => {
     const result = await Users.insertOne(newUser);
     const userId = result.insertedId.toString();
 
-    console.log("✅ User registered with OTP:", normalizedEmail);
+    console.log(`✅ User registered: ${allowedStudent.name} (${otpDoc.rollNo})`);
 
-    // Mark OTP as verified
+    // ✅ STEP 5: Mark student as registered in whitelist
+    await AllowedStudents.updateOne(
+      { rollNo: otpDoc.rollNo },
+      {
+        $set: {
+          isRegistered: true,
+          registeredAt: now,
+          registeredEmail: normalizedEmail,
+          userId: userId,
+        },
+      }
+    );
+
+    // ✅ STEP 6: Mark OTP as used
     await OTPs.updateOne(
       { _id: otpDoc._id },
       { $set: { verified: true } }
     );
 
-    // Send welcome email (non-blocking)
+    // ✅ STEP 7: Send welcome email (non-blocking)
     sendWelcomeEmail({ ...newUser, _id: result.insertedId }).catch((err) =>
       console.error("Welcome email failed:", err)
     );
 
-    // Generate tokens
-    const payload = { userId, email: normalizedEmail, role: userRole };
+    // ✅ STEP 8: Generate tokens
+    const payload = { userId, email: normalizedEmail, role: "student" };
 
     const accessToken = jwt.sign(payload, process.env.JWT_SECRET, {
       expiresIn: process.env.JWT_EXPIRES_IN || "24h",
@@ -578,9 +889,14 @@ app.post("/api/auth/register/verify-otp", async (req, res) => {
       { expiresIn: "30d" }
     );
 
+    // Get registration stats
+    const totalRegistered = await AllowedStudents.countDocuments({ isRegistered: true });
+    const totalStudents = await AllowedStudents.countDocuments();
+
     res.status(201).json({
       success: true,
-      message: "Registration successful! Welcome to CCMS.",
+      message: `Welcome to CCMS, ${allowedStudent.name.split(" ")[0]}! 🎉`,
+      subtitle: `You're student #${totalRegistered} of ${totalStudents} to join.`,
       token: accessToken,
       refreshToken: refreshToken,
       user: {
@@ -590,6 +906,8 @@ app.post("/api/auth/register/verify-otp", async (req, res) => {
         email: newUser.email,
         phone: newUser.phone,
         roll: newUser.roll,
+        rollNo: newUser.rollNo,
+        batch: newUser.batch,
         role: newUser.role,
       },
     });
@@ -603,26 +921,113 @@ app.post("/api/auth/register/verify-otp", async (req, res) => {
   }
 });
 
+
+// Resend OTP
+// app.post("/api/auth/register/resend-otp", async (req, res) => {
+//   try {
+//     const { email, name } = req.body;
+
+//     if (!email) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Email is required",
+//       });
+//     }
+
+//     const normalizedEmail = email.toLowerCase().trim();
+
+//     // Check if user already exists
+//     const existingUser = await Users.findOne({ email: normalizedEmail });
+//     if (existingUser) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Email already registered",
+//       });
+//     }
+
+//     // Check rate limiting (prevent spam)
+//     const recentOTP = await OTPs.findOne({
+//       email: normalizedEmail,
+//       createdAt: { $gt: new Date(Date.now() - 60 * 1000) }, // Last 1 minute
+//     });
+
+//     if (recentOTP) {
+//       return res.status(429).json({
+//         success: false,
+//         message: "Please wait 1 minute before requesting another code",
+//       });
+//     }
+
+//     // Generate new OTP
+//     const otp = otpGenerator.generate(6, {
+//       digits: true,
+//       upperCaseAlphabets: false,
+//       lowerCaseAlphabets: false,
+//       specialChars: false,
+//     });
+
+//     console.log(`📧 Resent OTP for ${normalizedEmail}: ${otp}`);
+
+//     // Delete old OTPs and create new one
+//     await OTPs.deleteMany({ email: normalizedEmail });
+//     await OTPs.insertOne({
+//       email: normalizedEmail,
+//       otp: otp,
+//       name: name?.trim() || "User",
+//       verified: false,
+//       createdAt: new Date(),
+//       expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+//     });
+
+//     // Send OTP email
+//     await sendOTPEmail(normalizedEmail, otp, name || "User");
+
+//     res.status(200).json({
+//       success: true,
+//       message: "New verification code sent",
+//       expiresIn: 600,
+//     });
+//   } catch (error) {
+//     console.error("❌ Resend OTP error:", error);
+//     res.status(500).json({
+//       success: false,
+//       message: "Failed to resend code",
+//     });
+//   }
+// });
+
+
 // Resend OTP
 app.post("/api/auth/register/resend-otp", async (req, res) => {
   try {
-    const { email, name } = req.body;
+    const { email, rollNo } = req.body;
 
-    if (!email) {
+    if (!email || !rollNo) {
       return res.status(400).json({
         success: false,
-        message: "Email is required",
+        message: "Email and Roll Number are required",
       });
     }
 
     const normalizedEmail = email.toLowerCase().trim();
+    const normalizedRollNo = rollNo.trim();
 
-    // Check if user already exists
-    const existingUser = await Users.findOne({ email: normalizedEmail });
-    if (existingUser) {
+    // Verify student is in whitelist
+    const allowedStudent = await AllowedStudents.findOne({ 
+      rollNo: normalizedRollNo 
+    });
+
+    if (!allowedStudent) {
+      return res.status(403).json({
+        success: false,
+        message: "Roll number not found in our records",
+      });
+    }
+
+    if (allowedStudent.isRegistered) {
       return res.status(400).json({
         success: false,
-        message: "Email already registered",
+        message: "This roll number is already registered. Please login.",
       });
     }
 
@@ -633,9 +1038,11 @@ app.post("/api/auth/register/resend-otp", async (req, res) => {
     });
 
     if (recentOTP) {
+      const waitTime = Math.ceil((60000 - (Date.now() - recentOTP.createdAt.getTime())) / 1000);
       return res.status(429).json({
         success: false,
-        message: "Please wait 1 minute before requesting another code",
+        message: `Please wait ${waitTime} seconds before requesting another code`,
+        waitTime: waitTime,
       });
     }
 
@@ -647,35 +1054,37 @@ app.post("/api/auth/register/resend-otp", async (req, res) => {
       specialChars: false,
     });
 
-    console.log(`📧 Resent OTP for ${normalizedEmail}: ${otp}`);
+    console.log(`📧 Resent OTP for ${allowedStudent.name}: ${otp}`);
 
     // Delete old OTPs and create new one
     await OTPs.deleteMany({ email: normalizedEmail });
     await OTPs.insertOne({
       email: normalizedEmail,
       otp: otp,
-      name: name?.trim() || "User",
+      rollNo: normalizedRollNo,
+      name: allowedStudent.name,
       verified: false,
       createdAt: new Date(),
       expiresAt: new Date(Date.now() + 10 * 60 * 1000),
     });
 
     // Send OTP email
-    await sendOTPEmail(normalizedEmail, otp, name || "User");
+    await sendOTPEmail(normalizedEmail, otp, allowedStudent.name);
 
     res.status(200).json({
       success: true,
-      message: "New verification code sent",
+      message: `New verification code sent to ${normalizedEmail}`,
       expiresIn: 600,
     });
   } catch (error) {
     console.error("❌ Resend OTP error:", error);
     res.status(500).json({
       success: false,
-      message: "Failed to resend code",
+      message: "Failed to resend code. Please try again.",
     });
   }
 });
+
 
 // ============================================
 // EXISTING AUTH ROUTES (UNCHANGED)
@@ -1721,6 +2130,85 @@ app.get("/api/complaints/public/stats", async (req, res) => {
     });
   }
 });
+
+// ============================================
+// ADMIN: Student Registration Stats
+// ============================================
+
+app.get(
+  "/api/admin/students/stats",
+  auth,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      const total = await AllowedStudents.countDocuments();
+      const registered = await AllowedStudents.countDocuments({ isRegistered: true });
+      const notRegistered = total - registered;
+
+      // Batch-wise breakdown
+      const batchStats = await AllowedStudents.aggregate([
+        {
+          $group: {
+            _id: "$batch",
+            total: { $sum: 1 },
+            registered: {
+              $sum: { $cond: ["$isRegistered", 1, 0] },
+            },
+          },
+        },
+        { $sort: { _id: 1 } },
+      ]).toArray();
+
+      // Recent registrations
+      const recentRegistrations = await AllowedStudents.find({ isRegistered: true })
+        .sort({ registeredAt: -1 })
+        .limit(10)
+        .project({ name: 1, rollNo: 1, batch: 1, registeredAt: 1 })
+        .toArray();
+
+      res.json({
+        overview: {
+          total,
+          registered,
+          notRegistered,
+          registrationRate: Math.round((registered / total) * 100),
+        },
+        byBatch: batchStats,
+        recentRegistrations,
+      });
+    } catch (error) {
+      console.error("Student stats error:", error);
+      res.status(500).json({ message: "Failed to fetch student stats" });
+    }
+  }
+);
+
+// Get list of all students (for admin to see who registered)
+app.get(
+  "/api/admin/students/list",
+  auth,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      const { batch, registered } = req.query;
+      
+      const query = {};
+      if (batch) query.batch = batch;
+      if (registered === "true") query.isRegistered = true;
+      if (registered === "false") query.isRegistered = false;
+
+      const students = await AllowedStudents.find(query)
+        .sort({ rollNo: 1 })
+        .toArray();
+
+      res.json(students);
+    } catch (error) {
+      console.error("Student list error:", error);
+      res.status(500).json({ message: "Failed to fetch students" });
+    }
+  }
+);
+
 
 // ---------- 404 & ERROR HANDLERS ----------
 app.use((req, res) => {

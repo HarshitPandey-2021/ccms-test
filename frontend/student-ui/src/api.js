@@ -1,4 +1,4 @@
-// src/api.js - COMPLETE WITH OTP FUNCTIONS
+// src/api.js - COMPLETE WITH WHITELIST + OTP FUNCTIONS
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:4000/api";
 
@@ -12,14 +12,19 @@ async function handleResponse(res) {
   }
 
   if (!res.ok) {
-    const message = data?.message || `Request failed with status ${res.status}`;
-    throw new Error(message);
+    // Create error with extra details
+    const error = new Error(data?.message || `Request failed with status ${res.status}`);
+    error.errorType = data?.errorType || null;
+    error.details = data?.details || null;
+    error.registeredEmail = data?.registeredEmail || null;
+    error.waitTime = data?.waitTime || null;
+    throw error;
   }
 
   return data;
 }
 
-// ==================== EXISTING AUTH FUNCTIONS ====================
+// ==================== AUTH FUNCTIONS ====================
 
 export async function loginApi(email, password, role) {
   const res = await fetch(`${API_BASE}/auth/login`, {
@@ -33,6 +38,7 @@ export async function loginApi(email, password, role) {
   return handleResponse(res);
 }
 
+// Legacy signup (without OTP) - Keep for backwards compatibility
 export async function signupApi(name, roll, email, password, role) {
   const res = await fetch(`${API_BASE}/auth/register`, {
     method: "POST",
@@ -45,16 +51,20 @@ export async function signupApi(name, roll, email, password, role) {
   return handleResponse(res);
 }
 
-// ==================== ✅ NEW: OTP REGISTRATION FUNCTIONS ====================
+// ==================== ✅ NEW: WHITELIST + OTP REGISTRATION ====================
 
-// Step 1: Request OTP for registration
-export async function requestRegistrationOTP(email, name) {
+// Step 1: Verify Roll Number & Request OTP
+export async function requestRegistrationOTP(email, name, rollNo) {
   const res = await fetch(`${API_BASE}/auth/register/request-otp`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ email, name }),
+    body: JSON.stringify({ 
+      email: email.trim().toLowerCase(), 
+      name: name?.trim() || "",
+      rollNo: rollNo.trim()
+    }),
   });
 
   return handleResponse(res);
@@ -67,26 +77,34 @@ export async function verifyOTPAndRegister(userData) {
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(userData),
+    body: JSON.stringify({
+      email: userData.email?.trim().toLowerCase(),
+      otp: userData.otp?.trim(),
+      password: userData.password,
+      phone: userData.phone?.trim() || null,
+    }),
   });
 
   return handleResponse(res);
 }
 
-// Resend OTP
-export async function resendOTP(email, name) {
+// Resend OTP (also requires rollNo for verification)
+export async function resendOTP(email, rollNo) {
   const res = await fetch(`${API_BASE}/auth/register/resend-otp`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ email, name }),
+    body: JSON.stringify({ 
+      email: email.trim().toLowerCase(),
+      rollNo: rollNo.trim()
+    }),
   });
 
   return handleResponse(res);
 }
 
-// ==================== EXISTING PUBLIC API ====================
+// ==================== PUBLIC API ====================
 
 // Get public stats for landing page
 export async function getLandingStatsApi() {

@@ -1,4 +1,4 @@
-// user-portal/src/context/AuthContext.jsx - FIXED LOGOUT
+// user-portal/src/context/AuthContext.jsx - COMPLETE FIXED VERSION
 
 import React, { createContext, useState, useEffect } from "react";
 
@@ -39,6 +39,7 @@ export default function AuthProvider({ children }) {
         setUser(authData.user);
         setIsAuthenticated(true);
 
+        // ✅ Clean URL using replaceState (prevents back to auth URL)
         urlParams.delete("auth");
         const newUrl = `${window.location.pathname}${
           urlParams.toString() ? `?${urlParams.toString()}` : ""
@@ -102,19 +103,19 @@ export default function AuthProvider({ children }) {
     setIsAuthenticated(true);
   }
 
-  // ✅ FIXED LOGOUT - Clear everything and prevent back navigation
+  // ✅ FIXED LOGOUT - Prevents back button issue
   function logout() {
-    // Clear all storage
+    // Step 1: Clear all storage
     localStorage.removeItem("token");
     localStorage.removeItem("refreshToken");
     localStorage.removeItem("user");
-    sessionStorage.clear(); // ✅ Clear session storage too
+    sessionStorage.clear();
     
-    // Reset state
+    // Step 2: Reset state
     setUser(null);
     setIsAuthenticated(false);
 
-    // ✅ CRITICAL: Use window.location.replace() instead of href
+    // Step 3: Clear history and redirect
     // This replaces current history entry, preventing back navigation
     window.location.replace("https://landing-test-liard-one.vercel.app/login");
   }
@@ -129,8 +130,9 @@ export default function AuthProvider({ children }) {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <div className="text-xl font-semibold text-gray-600 dark:text-gray-400">
-          Loading...
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-gray-600 dark:text-gray-400 font-medium">Loading...</p>
         </div>
       </div>
     );
@@ -143,4 +145,13 @@ export default function AuthProvider({ children }) {
       {children}
     </AuthContext.Provider>
   );
+}
+
+// ✅ Custom hook for easier usage
+export function useAuth() {
+  const context = React.useContext(AuthContext);
+  if (!context) {
+    throw new Error("useAuth must be used within AuthProvider");
+  }
+  return context;
 }

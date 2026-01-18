@@ -1,8 +1,7 @@
-// src/pages/SignupPage.jsx - WITH OTP VERIFICATION
+// src/pages/SignupPage.jsx - WITH WHITELIST + OTP VERIFICATION
 
 import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
-// ✅ You'll need to add these functions to your api.js
 import { requestRegistrationOTP, verifyOTPAndRegister, resendOTP } from "../api.js";
 
 export default function SignupPage() {
@@ -12,7 +11,6 @@ export default function SignupPage() {
   const [step, setStep] = useState(1);
   
   const [form, setForm] = useState({
-    name: "",
     roll: "",
     email: "",
     password: "",
@@ -20,11 +18,15 @@ export default function SignupPage() {
     phone: "",
   });
   
+  // Student info from whitelist (received after roll verification)
+  const [studentInfo, setStudentInfo] = useState(null);
+  
   // OTP State
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const otpRefs = useRef([]);
   
   const [error, setError] = useState("");
+  const [errorDetails, setErrorDetails] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
   
@@ -46,6 +48,7 @@ export default function SignupPage() {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
     setError("");
+    setErrorDetails("");
   }
 
   // OTP Input Handlers
@@ -83,16 +86,14 @@ export default function SignupPage() {
     return regex.test(pwd);
   }
 
-  // Step 1: Request OTP
+  // Step 1: Verify Roll Number & Request OTP
   async function handleRequestOTP(e) {
     e.preventDefault();
     setError("");
+    setErrorDetails("");
     setSuccess("");
 
     // Validation
-    if (!form.name.trim()) {
-      return setError("Full name is required");
-    }
     if (!form.roll.trim()) {
       return setError("Roll number is required");
     }
@@ -110,12 +111,31 @@ export default function SignupPage() {
 
     setLoading(true);
     try {
-      await requestRegistrationOTP(form.email.trim(), form.name.trim());
-      setSuccess("Verification code sent to your email!");
+      const response = await requestRegistrationOTP(
+        form.email.trim(), 
+        "", // Name comes from whitelist now
+        form.roll.trim()
+      );
+      
+      // Save student info from response
+      setStudentInfo({
+        name: response.studentName,
+        greeting: response.greeting,
+        subtitle: response.subtitle,
+        batch: response.batch,
+      });
+      
+      setSuccess(response.greeting || "Verification code sent!");
       setStep(2);
       setResendTimer(60);
     } catch (err) {
-      setError(err.message || "Failed to send verification code");
+      setError(err.message || "Failed to verify roll number");
+      setErrorDetails(err.details || "");
+      
+      // Special handling for already registered
+      if (err.errorType === "ALREADY_REGISTERED" && err.registeredEmail) {
+        setErrorDetails(`${err.details}\n${err.registeredEmail}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -125,6 +145,7 @@ export default function SignupPage() {
   async function handleVerifyOTP(e) {
     e.preventDefault();
     setError("");
+    setErrorDetails("");
 
     const otpString = otp.join("");
     if (otpString.length !== 6) {
@@ -136,22 +157,34 @@ export default function SignupPage() {
       const response = await verifyOTPAndRegister({
         email: form.email.trim(),
         otp: otpString,
-        name: form.name.trim(),
         password: form.password,
-        roll: form.roll.trim(),
         phone: form.phone.trim() || null,
       });
 
       // Save tokens
       localStorage.setItem("token", response.token);
-      localStorage.setItem("refreshToken", response.refreshToken);
+      if (response.refreshToken) {
+        localStorage.setItem("refreshToken", response.refreshToken);
+      }
       localStorage.setItem("user", JSON.stringify(response.user));
 
-      setSuccess("Account created successfully! Redirecting...");
+      setSuccess(response.message || "Account created successfully!");
       
+      // Show success for a moment then redirect
       setTimeout(() => {
-        navigate("/dashboard");
-      }, 1500);
+        // Redirect to student dashboard
+        const USER_APP_URL = import.meta.env.VITE_STUDENT_URL || "http://localhost:3001";
+        
+        const payload = {
+          token: response.token,
+          refreshToken: response.refreshToken || null,
+          user: response.user,
+          timestamp: Date.now(),
+        };
+        
+        const encoded = encodeURIComponent(JSON.stringify(payload));
+        window.location.href = `${USER_APP_URL}/?auth=${encoded}`;
+      }, 2000);
       
     } catch (err) {
       setError(err.message || "Invalid verification code");
@@ -167,15 +200,19 @@ export default function SignupPage() {
     if (resendTimer > 0) return;
     
     setError("");
+    setErrorDetails("");
     setLoading(true);
     try {
-      await resendOTP(form.email.trim(), form.name.trim());
+      await resendOTP(form.email.trim(), form.roll.trim());
       setSuccess("New verification code sent!");
       setResendTimer(60);
       setOtp(["", "", "", "", "", ""]);
       otpRefs.current[0]?.focus();
     } catch (err) {
       setError(err.message || "Failed to resend code");
+      if (err.waitTime) {
+        setResendTimer(err.waitTime);
+      }
     } finally {
       setLoading(false);
     }
@@ -186,7 +223,9 @@ export default function SignupPage() {
     setStep(1);
     setOtp(["", "", "", "", "", ""]);
     setError("");
+    setErrorDetails("");
     setSuccess("");
+    setStudentInfo(null);
   }
 
   return (
@@ -213,19 +252,39 @@ export default function SignupPage() {
             color: "transparent",
           }}
         >
-          {step === 1 ? "Student Sign Up" : "Verify Email"}
+          {step === 1 ? "Student Registration" : "Verify Email"}
         </h2>
         
-        {step === 2 && (
+        {/* Subtitle based on step */}
+        {step === 1 && (
           <p className="text-center text-gray-600 text-sm mb-4">
-            Enter the code sent to <strong>{form.email}</strong>
+            Only University of Lucknow B.Tech AI students can register
           </p>
+        )}
+        
+        {step === 2 && studentInfo && (
+          <div className="text-center mb-4">
+            <p className="text-lg font-semibold text-gray-800">
+              {studentInfo.greeting}
+            </p>
+            <p className="text-sm text-gray-600">
+              {studentInfo.subtitle}
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              Code sent to <strong>{form.email}</strong>
+            </p>
+          </div>
         )}
 
         {/* Error Message */}
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg mb-4 text-center text-sm">
-            {error}
+          <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg mb-4 text-sm">
+            <p className="font-medium">{error}</p>
+            {errorDetails && (
+              <p className="text-red-500 text-xs mt-1 whitespace-pre-line">
+                {errorDetails}
+              </p>
+            )}
           </div>
         )}
 
@@ -239,34 +298,27 @@ export default function SignupPage() {
         {/* ==================== STEP 1: REGISTRATION FORM ==================== */}
         {step === 1 && (
           <form onSubmit={handleRequestOTP} className="space-y-4 text-gray-800">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Full Name <span className="text-red-500">*</span>
-              </label>
-              <input
-                name="name"
-                placeholder="Enter your full name"
-                className="w-full border border-gray-300 px-4 py-3 rounded-lg focus:ring-2 focus:ring-[#c026d3] focus:border-transparent outline-none transition-all"
-                onChange={handleChange}
-                value={form.name}
-                required
-              />
-            </div>
-
+            
+            {/* Roll Number - FIRST and REQUIRED */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Roll Number <span className="text-red-500">*</span>
               </label>
               <input
                 name="roll"
-                placeholder="Enter your roll number"
-                className="w-full border border-gray-300 px-4 py-3 rounded-lg focus:ring-2 focus:ring-[#0ea5e9] focus:border-transparent outline-none transition-all"
+                placeholder="e.g., 2310013155001"
+                className="w-full border border-gray-300 px-4 py-3 rounded-lg focus:ring-2 focus:ring-[#c026d3] focus:border-transparent outline-none transition-all font-mono"
                 onChange={handleChange}
                 value={form.roll}
                 required
+                autoFocus
               />
+              <p className="text-xs text-gray-500 mt-1">
+                Enter your official university roll number
+              </p>
             </div>
 
+            {/* Email */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Email <span className="text-red-500">*</span>
@@ -274,14 +326,15 @@ export default function SignupPage() {
               <input
                 name="email"
                 type="email"
-                placeholder="Enter your email address"
-                className="w-full border border-gray-300 px-4 py-3 rounded-lg focus:ring-2 focus:ring-[#008080] focus:border-transparent outline-none transition-all"
+                placeholder="your.email@gmail.com"
+                className="w-full border border-gray-300 px-4 py-3 rounded-lg focus:ring-2 focus:ring-[#0ea5e9] focus:border-transparent outline-none transition-all"
                 onChange={handleChange}
                 value={form.email}
                 required
               />
             </div>
 
+            {/* Phone (Optional) */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Phone Number <span className="text-gray-400">(Optional)</span>
@@ -290,12 +343,13 @@ export default function SignupPage() {
                 name="phone"
                 type="tel"
                 placeholder="Enter your phone number"
-                className="w-full border border-gray-300 px-4 py-3 rounded-lg focus:ring-2 focus:ring-[#c026d3] focus:border-transparent outline-none transition-all"
+                className="w-full border border-gray-300 px-4 py-3 rounded-lg focus:ring-2 focus:ring-[#008080] focus:border-transparent outline-none transition-all"
                 onChange={handleChange}
                 value={form.phone}
               />
             </div>
 
+            {/* Password */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Password <span className="text-red-500">*</span>
@@ -310,10 +364,11 @@ export default function SignupPage() {
                 required
               />
               <p className="text-xs text-gray-500 mt-1">
-                Must be 8+ characters with uppercase & number
+                8+ characters with uppercase & number
               </p>
             </div>
 
+            {/* Confirm Password */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Confirm Password <span className="text-red-500">*</span>
@@ -329,6 +384,7 @@ export default function SignupPage() {
               />
             </div>
 
+            {/* Submit Button */}
             <button
               type="submit"
               disabled={loading}
@@ -343,10 +399,10 @@ export default function SignupPage() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
                   </svg>
-                  Sending Verification Code...
+                  Verifying Roll Number...
                 </span>
               ) : (
-                "Continue →"
+                "Verify & Continue →"
               )}
             </button>
 
@@ -367,16 +423,27 @@ export default function SignupPage() {
         {step === 2 && (
           <form onSubmit={handleVerifyOTP} className="space-y-6">
             
-            {/* OTP Icon */}
+            {/* Verified Badge */}
             <div className="text-center">
               <div 
-                className="inline-flex items-center justify-center w-20 h-20 rounded-full mb-4"
+                className="inline-flex items-center justify-center w-20 h-20 rounded-full mb-2"
                 style={{
-                  background: "linear-gradient(135deg, rgba(192,38,211,0.1), rgba(14,165,233,0.1))",
+                  background: "linear-gradient(135deg, rgba(16,185,129,0.1), rgba(14,165,233,0.1))",
                 }}
               >
-                <span className="text-4xl">📧</span>
+                <span className="text-4xl">✉️</span>
               </div>
+              
+              {studentInfo && (
+                <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-2 inline-block">
+                  <p className="text-green-700 text-sm font-medium">
+                    ✓ Verified: {studentInfo.name}
+                  </p>
+                  <p className="text-green-600 text-xs">
+                    {studentInfo.batch}
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* OTP Input Boxes */}
@@ -438,10 +505,10 @@ export default function SignupPage() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
                   </svg>
-                  Verifying...
+                  Creating Your Account...
                 </span>
               ) : (
-                "Verify & Create Account"
+                "Verify & Create Account 🎉"
               )}
             </button>
 
@@ -449,7 +516,8 @@ export default function SignupPage() {
             <button
               type="button"
               onClick={handleBackToForm}
-              className="w-full py-3 border-2 border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition"
+              disabled={loading}
+              className="w-full py-3 border-2 border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition disabled:opacity-50"
             >
               ← Back to Form
             </button>
@@ -457,9 +525,14 @@ export default function SignupPage() {
         )}
 
         {/* Footer */}
-        <p className="text-center text-xs text-gray-400 mt-6">
-          Admin accounts are managed by system administrators
-        </p>
+        <div className="mt-6 pt-4 border-t border-gray-200">
+          <p className="text-center text-xs text-gray-500">
+            🔒 Only B.Tech AI students (2023-2027 batches) can register
+          </p>
+          <p className="text-center text-xs text-gray-400 mt-1">
+            Contact your CR if you face any issues
+          </p>
+        </div>
       </div>
     </div>
   );
