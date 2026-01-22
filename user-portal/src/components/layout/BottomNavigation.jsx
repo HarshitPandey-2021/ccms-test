@@ -74,9 +74,9 @@ const BottomNavigation = () => {
               >
                 <Icon className="h-6 w-6" />
                 {/* Active indicator dot */}
-                {active && (
+                {/* {active && (
                   <span className="absolute -top-1 -right-1 w-2 h-2 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
-                )}
+                )} */}
               </div>
               <span
                 className={`text-xs mt-1 font-medium transition-all duration-200 ${
