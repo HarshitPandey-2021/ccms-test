@@ -1634,6 +1634,106 @@ app.post(
       const complaintId = `CMP${String(complaintCount + 1).padStart(5, "0")}`;
 
       const now = new Date();
+
+      // ========== AUTO-ASSIGN DEPARTMENT BASED ON CATEGORY ==========
+      let departmentId = null;
+      let departmentName = null;
+
+      const categoryDepartmentMap = {
+        // Infrastructure → Maintenance
+        'electrical': 'Maintenance',
+        'plumbing': 'Maintenance',
+        'furniture': 'Maintenance',
+        'civil': 'Maintenance',
+        'ac/cooling': 'Maintenance',
+        'ac': 'Maintenance',
+        'building': 'Maintenance',
+        'infrastructure': 'Maintenance',
+        
+        // Tech → IT Department
+        'wifi': 'IT Department',
+        'internet': 'IT Department',
+        'computer': 'IT Department',
+        'projector': 'IT Department',
+        'software': 'IT Department',
+        'network': 'IT Department',
+        'it': 'IT Department',
+        'technical': 'IT Department',
+        
+        // Cleanliness → Housekeeping
+        'cleaning': 'Housekeeping',
+        'washroom': 'Housekeeping',
+        'garbage': 'Housekeeping',
+        'sanitation': 'Housekeeping',
+        'hygiene': 'Housekeeping',
+        
+        // Sensitive → Special Cells
+        'harassment': "Women's Cell",
+        'eve teasing': "Women's Cell",
+        'safety': "Women's Cell",
+        'women': "Women's Cell",
+        'ragging': 'Anti-Ragging Cell',
+        'bullying': 'Anti-Ragging Cell',
+        'discrimination': "Dean's Office",
+        
+        // Academic
+        'academic': 'Academic',
+        'examination': 'Academic',
+        'exam': 'Academic',
+        'faculty': 'Academic',
+        'teacher': 'Academic',
+        'syllabus': 'Academic',
+        
+        // Hostel
+        'hostel': 'Hostel',
+        'mess': 'Hostel',
+        'food': 'Hostel',
+        'canteen': 'Hostel',
+        'accommodation': 'Hostel',
+        
+        // Transport
+        'transport': 'Transport',
+        'bus': 'Transport',
+        'vehicle': 'Transport',
+        
+        // Library
+        'library': 'Library',
+        'books': 'Library',
+      };
+
+      // Try to match category to department
+      const categoryLower = category.toLowerCase().trim();
+      let mappedDeptName = categoryDepartmentMap[categoryLower];
+      
+      // If exact match not found, try partial match
+      if (!mappedDeptName) {
+        for (const [key, value] of Object.entries(categoryDepartmentMap)) {
+          if (categoryLower.includes(key) || key.includes(categoryLower)) {
+            mappedDeptName = value;
+            break;
+          }
+        }
+      }
+
+      // Find the department in database
+      if (mappedDeptName) {
+        const dept = await Departments.findOne({ 
+          name: { $regex: new RegExp(`^${mappedDeptName}$`, 'i') },
+          isActive: { $ne: false }
+        });
+        
+        if (dept) {
+          departmentId = dept._id;
+          departmentName = dept.name;
+          console.log(`✅ Auto-assigned to department: ${dept.name} (Category: ${category})`);
+        } else {
+          console.log(`⚠️ Department "${mappedDeptName}" not found in database`);
+        }
+      } else {
+        console.log(`ℹ️ No department mapping for category: ${category}`);
+      }
+      // ========== END AUTO-ASSIGN DEPARTMENT ==========
+
       const complaint = {
         complaintId,
         userId,
@@ -1649,7 +1749,6 @@ app.post(
         pdfDocument: pdfUrl,
         pdfPublicId,
         status: "Pending",
-        assignedTo: null,
         adminRemarks: "",
         isAnonymous:
           isAnonymous === "true" || isAnonymous === true ? true : false,
@@ -1666,6 +1765,15 @@ app.post(
             message: "Complaint submitted",
           },
         ],
+        
+        // ✅ NEW: Department & Assignment Fields
+        department: departmentId,
+        departmentName: departmentName,
+        assignedTo: null,
+        assignedToName: null,
+        assignedToEmail: null,
+        assignedBy: null,
+        assignedAt: null,
       };
 
       const r = await Complaints.insertOne(complaint);
@@ -1684,7 +1792,6 @@ app.post(
     }
   }
 );
-
 app.get("/api/complaints/mine", auth, async (req, res) => {
   try {
     const complaints = await Complaints.find({ userId: req.user.userId })
@@ -2610,13 +2717,54 @@ app.post("/api/departments", auth, requireRole("admin"), async (req, res) => {
     }
 
     // Check if department already exists
-    const existing = await Departments.findOne({ 
-      name: { $regex: new RegExp(`^${name.trim()}$`, 'i') } 
-    });
+  // Check if department already exists (only active ones)
+const existing = await Departments.findOne({ 
+  name: { $regex: new RegExp(`^${name.trim()}$`, 'i') },
+  isActive: { $ne: false }
+});
 
-    if (existing) {
-      return res.status(400).json({ message: "Department with this name already exists" });
+if (existing) {
+  return res.status(400).json({ message: "Department with this name already exists" });
+}
+
+// Check if there's a soft-deleted one with same name - reactivate it
+const softDeleted = await Departments.findOne({
+  name: { $regex: new RegExp(`^${name.trim()}$`, 'i') },
+  isActive: false
+});
+
+if (softDeleted) {
+  // Reactivate and update the existing record
+  await Departments.updateOne(
+    { _id: softDeleted._id },
+    { 
+      $set: { 
+        isActive: true,
+        description: description?.trim() || softDeleted.description || "",
+        categories: Array.isArray(categories) ? categories : softDeleted.categories || [],
+        headName: headName?.trim() || softDeleted.headName || "",
+        headEmail: headEmail?.trim() || softDeleted.headEmail || "",
+        headPhone: headPhone?.trim() || softDeleted.headPhone || "",
+        updatedAt: new Date()
+      } 
     }
+  );
+
+  const reactivated = await Departments.findOne({ _id: softDeleted._id });
+
+  await AdminLogs.insertOne({
+    adminId: req.user.userId,
+    action: "REACTIVATE_DEPARTMENT",
+    details: { departmentId: softDeleted._id, name: name.trim() },
+    timestamp: new Date(),
+  });
+
+  return res.status(201).json({
+    success: true,
+    message: "Department reactivated successfully",
+    data: reactivated,
+  });
+}
 
     const now = new Date();
     const department = {
@@ -2667,15 +2815,17 @@ app.put("/api/departments/:id", auth, requireRole("admin"), async (req, res) => 
     }
 
     // Check if new name conflicts with another department
-    if (name && name.trim().toLowerCase() !== existing.name.toLowerCase()) {
-      const nameConflict = await Departments.findOne({
-        _id: { $ne: toObjectId(id) },
-        name: { $regex: new RegExp(`^${name.trim()}$`, 'i') },
-      });
-      if (nameConflict) {
-        return res.status(400).json({ message: "Another department with this name exists" });
-      }
-    }
+// Check if new name conflicts with another ACTIVE department
+if (name && name.trim().toLowerCase() !== existing.name.toLowerCase()) {
+  const nameConflict = await Departments.findOne({
+    _id: { $ne: toObjectId(id) },
+    name: { $regex: new RegExp(`^${name.trim()}$`, 'i') },
+    isActive: { $ne: false }
+  });
+  if (nameConflict) {
+    return res.status(400).json({ message: "Another department with this name exists" });
+  }
+}
 
     const updateFields = {
       updatedAt: new Date(),
@@ -2776,6 +2926,686 @@ app.get("/api/departments/:id/categories", async (req, res) => {
   }
 });
 
+// ============================================
+// STAFF MANAGEMENT ENDPOINTS
+// ============================================
+
+// GET: All staff (with optional department filter)
+app.get("/api/staff", async (req, res) => {
+  try {
+    const { department } = req.query;
+    
+    const query = { isActive: { $ne: false } };
+    if (department && ObjectId.isValid(department)) {
+      query.department = toObjectId(department);
+    }
+
+    const staff = await db.collection("Staff")
+      .find(query)
+      .sort({ name: 1 })
+      .toArray();
+
+    // Populate department names
+    const departmentIds = [...new Set(staff.map(s => s.department).filter(Boolean))];
+    const departments = await Departments.find({
+      _id: { $in: departmentIds.map(id => toObjectId(id)) }
+    }).toArray();
+
+    const deptMap = {};
+    departments.forEach(d => {
+      deptMap[d._id.toString()] = d.name;
+    });
+
+    const populatedStaff = staff.map(s => ({
+      ...s,
+      departmentName: s.department ? deptMap[s.department.toString()] || 'Unknown' : 'Not Assigned'
+    }));
+
+    res.json({
+      success: true,
+      count: populatedStaff.length,
+      data: populatedStaff,
+    });
+  } catch (error) {
+    console.error("Error fetching staff:", error);
+    res.status(500).json({ message: "Failed to fetch staff" });
+  }
+});
+
+// GET: Staff by department
+app.get("/api/staff/department/:departmentId", async (req, res) => {
+  try {
+    const { departmentId } = req.params;
+
+    if (!ObjectId.isValid(departmentId)) {
+      return res.status(400).json({ message: "Invalid department ID" });
+    }
+
+    const staff = await db.collection("Staff")
+      .find({ 
+        department: toObjectId(departmentId),
+        isActive: { $ne: false }
+      })
+      .sort({ role: -1, name: 1 }) // Supervisors first
+      .toArray();
+
+    res.json({
+      success: true,
+      count: staff.length,
+      data: staff,
+    });
+  } catch (error) {
+    console.error("Error fetching staff by department:", error);
+    res.status(500).json({ message: "Failed to fetch staff" });
+  }
+});
+
+// GET: Single staff member
+app.get("/api/staff/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid staff ID" });
+    }
+
+    const staffMember = await db.collection("Staff").findOne({ _id: toObjectId(id) });
+
+    if (!staffMember) {
+      return res.status(404).json({ message: "Staff member not found" });
+    }
+
+    // Get department name
+    if (staffMember.department) {
+      const dept = await Departments.findOne({ _id: toObjectId(staffMember.department) });
+      staffMember.departmentName = dept?.name || 'Unknown';
+    }
+
+    res.json({ success: true, data: staffMember });
+  } catch (error) {
+    console.error("Error fetching staff member:", error);
+    res.status(500).json({ message: "Failed to fetch staff member" });
+  }
+});
+
+// POST: Create staff member (Admin only)
+app.post("/api/staff", auth, requireRole("admin"), async (req, res) => {
+  try {
+    const { name, email, phone, role, department } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ message: "Staff name is required" });
+    }
+
+    if (!email || !email.trim()) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    if (!department) {
+      return res.status(400).json({ message: "Department is required" });
+    }
+
+    // Check if email already exists
+// Check if email already exists (only active ones)
+const existing = await db.collection("Staff").findOne({ 
+  email: email.toLowerCase().trim(),
+  isActive: { $ne: false }
+});
+
+if (existing) {
+  return res.status(400).json({ message: "Staff with this email already exists" });
+}
+
+// Check if there's a soft-deleted one with same email - reactivate it
+const softDeleted = await db.collection("Staff").findOne({
+  email: email.toLowerCase().trim(),
+  isActive: false
+});
+
+if (softDeleted) {
+  // Verify department exists
+  const dept = await Departments.findOne({ _id: toObjectId(department) });
+  if (!dept) {
+    return res.status(400).json({ message: "Department not found" });
+  }
+
+  // Reactivate and update the existing record
+  await db.collection("Staff").updateOne(
+    { _id: softDeleted._id },
+    { 
+      $set: { 
+        isActive: true,
+        name: name.trim(),
+        phone: phone?.trim() || "",
+        role: role || "Worker",
+        department: toObjectId(department),
+        departmentName: dept.name,
+        updatedAt: new Date()
+      } 
+    }
+  );
+
+  const reactivated = await db.collection("Staff").findOne({ _id: softDeleted._id });
+
+  await AdminLogs.insertOne({
+    adminId: req.user.userId,
+    action: "REACTIVATE_STAFF",
+    details: { staffId: softDeleted._id, name: name.trim(), email: email.toLowerCase().trim() },
+    timestamp: new Date(),
+  });
+
+  return res.status(201).json({
+    success: true,
+    message: "Staff member reactivated successfully",
+    data: reactivated,
+  });
+}
+    // Verify department exists
+    if (!ObjectId.isValid(department)) {
+      return res.status(400).json({ message: "Invalid department ID" });
+    }
+
+    const dept = await Departments.findOne({ _id: toObjectId(department) });
+    if (!dept) {
+      return res.status(400).json({ message: "Department not found" });
+    }
+
+    const now = new Date();
+    const staffMember = {
+      name: name.trim(),
+      email: email.toLowerCase().trim(),
+      phone: phone?.trim() || "",
+      role: role || "Worker", // Worker or Supervisor
+      department: toObjectId(department),
+      departmentName: dept.name,
+      isActive: true,
+      complaintsAssigned: 0,
+      complaintsResolved: 0,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const result = await db.collection("Staff").insertOne(staffMember);
+
+    await AdminLogs.insertOne({
+      adminId: req.user.userId,
+      action: "CREATE_STAFF",
+      details: { staffId: result.insertedId, name: staffMember.name, department: dept.name },
+      timestamp: now,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Staff member created successfully",
+      data: { ...staffMember, _id: result.insertedId },
+    });
+  } catch (error) {
+    console.error("Error creating staff:", error);
+    res.status(500).json({ message: "Failed to create staff member" });
+  }
+});
+
+// PUT: Update staff member (Admin only)
+app.put("/api/staff/:id", auth, requireRole("admin"), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, email, phone, role, department, isActive } = req.body;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid staff ID" });
+    }
+
+    const existing = await db.collection("Staff").findOne({ _id: toObjectId(id) });
+    if (!existing) {
+      return res.status(404).json({ message: "Staff member not found" });
+    }
+
+    // Check email conflict
+// Check email conflict (only active staff)
+if (email && email.toLowerCase().trim() !== existing.email) {
+  const emailConflict = await db.collection("Staff").findOne({
+    _id: { $ne: toObjectId(id) },
+    email: email.toLowerCase().trim(),
+    isActive: { $ne: false }
+  });
+  if (emailConflict) {
+    return res.status(400).json({ message: "Another staff member with this email exists" });
+  }
+}
+
+    const updateFields = {
+      updatedAt: new Date(),
+    };
+
+    if (name !== undefined) updateFields.name = name.trim();
+    if (email !== undefined) updateFields.email = email.toLowerCase().trim();
+    if (phone !== undefined) updateFields.phone = phone.trim();
+    if (role !== undefined) updateFields.role = role;
+    if (isActive !== undefined) updateFields.isActive = isActive;
+
+    // Update department if provided
+    if (department !== undefined) {
+      if (!ObjectId.isValid(department)) {
+        return res.status(400).json({ message: "Invalid department ID" });
+      }
+      const dept = await Departments.findOne({ _id: toObjectId(department) });
+      if (!dept) {
+        return res.status(400).json({ message: "Department not found" });
+      }
+      updateFields.department = toObjectId(department);
+      updateFields.departmentName = dept.name;
+    }
+
+    await db.collection("Staff").updateOne(
+      { _id: toObjectId(id) },
+      { $set: updateFields }
+    );
+
+    await AdminLogs.insertOne({
+      adminId: req.user.userId,
+      action: "UPDATE_STAFF",
+      details: { staffId: id, updates: updateFields },
+      timestamp: new Date(),
+    });
+
+    const updated = await db.collection("Staff").findOne({ _id: toObjectId(id) });
+
+    res.json({
+      success: true,
+      message: "Staff member updated successfully",
+      data: updated,
+    });
+  } catch (error) {
+    console.error("Error updating staff:", error);
+    res.status(500).json({ message: "Failed to update staff member" });
+  }
+});
+
+// DELETE: Delete staff member (Admin only) - Soft delete
+app.delete("/api/staff/:id", auth, requireRole("admin"), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid staff ID" });
+    }
+
+    const existing = await db.collection("Staff").findOne({ _id: toObjectId(id) });
+    if (!existing) {
+      return res.status(404).json({ message: "Staff member not found" });
+    }
+
+    // Soft delete
+    await db.collection("Staff").updateOne(
+      { _id: toObjectId(id) },
+      { $set: { isActive: false, updatedAt: new Date() } }
+    );
+
+    await AdminLogs.insertOne({
+      adminId: req.user.userId,
+      action: "DELETE_STAFF",
+      details: { staffId: id, name: existing.name },
+      timestamp: new Date(),
+    });
+
+    res.json({
+      success: true,
+      message: "Staff member deleted successfully",
+    });
+  } catch (error) {
+    console.error("Error deleting staff:", error);
+    res.status(500).json({ message: "Failed to delete staff member" });
+  }
+});
+
+// GET: Staff stats (for dashboard)
+app.get("/api/staff/stats/overview", auth, requireRole("admin"), async (req, res) => {
+  try {
+    const totalStaff = await db.collection("Staff").countDocuments({ isActive: { $ne: false } });
+    const supervisors = await db.collection("Staff").countDocuments({ role: "Supervisor", isActive: { $ne: false } });
+    const workers = await db.collection("Staff").countDocuments({ role: "Worker", isActive: { $ne: false } });
+
+    // Staff by department
+    const byDepartment = await db.collection("Staff").aggregate([
+      { $match: { isActive: { $ne: false } } },
+      { $group: { _id: "$departmentName", count: { $sum: 1 } } },
+      { $sort: { count: -1 } }
+    ]).toArray();
+
+    res.json({
+      success: true,
+      data: {
+        total: totalStaff,
+        supervisors,
+        workers,
+        byDepartment,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching staff stats:", error);
+    res.status(500).json({ message: "Failed to fetch staff stats" });
+  }
+});
+
+// ============================================
+// COMPLAINT ASSIGNMENT ENDPOINTS
+// ============================================
+
+// POST: Assign complaint to staff
+app.post("/api/complaints/:id/assign", auth, requireRole("admin"), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { staffId, priority, remarks } = req.body;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid complaint ID" });
+    }
+
+    if (!staffId) {
+      return res.status(400).json({ message: "Staff ID is required" });
+    }
+
+    if (!ObjectId.isValid(staffId)) {
+      return res.status(400).json({ message: "Invalid staff ID" });
+    }
+
+    // Find complaint
+    const complaint = await Complaints.findOne({ _id: toObjectId(id) });
+    if (!complaint) {
+      return res.status(404).json({ message: "Complaint not found" });
+    }
+
+    // Find staff member
+    const staff = await db.collection("Staff").findOne({ 
+      _id: toObjectId(staffId),
+      isActive: { $ne: false }
+    });
+    if (!staff) {
+      return res.status(404).json({ message: "Staff member not found" });
+    }
+
+    const now = new Date();
+
+    // Update complaint
+    const updateFields = {
+      assignedTo: staffId,
+      assignedToName: staff.name,
+      assignedToEmail: staff.email,
+      assignedBy: req.user.userId,
+      assignedAt: now,
+      status: "Assigned",
+      updatedAt: now,
+    };
+
+    if (priority) {
+      updateFields.priority = priority;
+    }
+
+    // Add to timeline
+    const timelineEntry = {
+      status: "Assigned",
+      timestamp: now,
+      message: `Assigned to ${staff.name} (${staff.departmentName || 'Staff'})`,
+      by: req.user.userId,
+    };
+
+    if (remarks) {
+      timelineEntry.remarks = remarks;
+      updateFields.adminRemarks = remarks;
+    }
+
+    await Complaints.updateOne(
+      { _id: toObjectId(id) },
+      { 
+        $set: updateFields,
+        $push: { timeline: timelineEntry }
+      }
+    );
+
+    // Update staff assignment count
+    await db.collection("Staff").updateOne(
+      { _id: toObjectId(staffId) },
+      { $inc: { complaintsAssigned: 1 } }
+    );
+
+    // Log admin action
+    await AdminLogs.insertOne({
+      adminId: req.user.userId,
+      action: "ASSIGN_COMPLAINT",
+      complaintId: id,
+      details: { 
+        staffId, 
+        staffName: staff.name,
+        priority: priority || complaint.priority 
+      },
+      timestamp: now,
+    });
+
+    // Get updated complaint
+    const updated = await Complaints.findOne({ _id: toObjectId(id) });
+
+    res.json({
+      success: true,
+      message: `Complaint assigned to ${staff.name}`,
+      data: updated,
+    });
+  } catch (error) {
+    console.error("Error assigning complaint:", error);
+    res.status(500).json({ message: "Failed to assign complaint" });
+  }
+});
+
+// PUT: Reassign complaint to different staff
+app.put("/api/complaints/:id/reassign", auth, requireRole("admin"), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { staffId, reason } = req.body;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid complaint ID" });
+    }
+
+    if (!staffId || !ObjectId.isValid(staffId)) {
+      return res.status(400).json({ message: "Valid staff ID is required" });
+    }
+
+    const complaint = await Complaints.findOne({ _id: toObjectId(id) });
+    if (!complaint) {
+      return res.status(404).json({ message: "Complaint not found" });
+    }
+
+    const newStaff = await db.collection("Staff").findOne({ 
+      _id: toObjectId(staffId),
+      isActive: { $ne: false }
+    });
+    if (!newStaff) {
+      return res.status(404).json({ message: "Staff member not found" });
+    }
+
+    const previousStaffId = complaint.assignedTo;
+    const now = new Date();
+
+    // Update complaint
+    await Complaints.updateOne(
+      { _id: toObjectId(id) },
+      { 
+        $set: {
+          assignedTo: staffId,
+          assignedToName: newStaff.name,
+          assignedToEmail: newStaff.email,
+          assignedBy: req.user.userId,
+          assignedAt: now,
+          updatedAt: now,
+        },
+        $push: { 
+          timeline: {
+            status: "Reassigned",
+            timestamp: now,
+            message: `Reassigned to ${newStaff.name}${reason ? `: ${reason}` : ''}`,
+            by: req.user.userId,
+          }
+        }
+      }
+    );
+
+    // Update staff counts
+    if (previousStaffId) {
+      await db.collection("Staff").updateOne(
+        { _id: toObjectId(previousStaffId) },
+        { $inc: { complaintsAssigned: -1 } }
+      );
+    }
+    await db.collection("Staff").updateOne(
+      { _id: toObjectId(staffId) },
+      { $inc: { complaintsAssigned: 1 } }
+    );
+
+    await AdminLogs.insertOne({
+      adminId: req.user.userId,
+      action: "REASSIGN_COMPLAINT",
+      complaintId: id,
+      details: { previousStaffId, newStaffId: staffId, newStaffName: newStaff.name, reason },
+      timestamp: now,
+    });
+
+    const updated = await Complaints.findOne({ _id: toObjectId(id) });
+
+    res.json({
+      success: true,
+      message: `Complaint reassigned to ${newStaff.name}`,
+      data: updated,
+    });
+  } catch (error) {
+    console.error("Error reassigning complaint:", error);
+    res.status(500).json({ message: "Failed to reassign complaint" });
+  }
+});
+
+// PUT: Unassign complaint
+app.put("/api/complaints/:id/unassign", auth, requireRole("admin"), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid complaint ID" });
+    }
+
+    const complaint = await Complaints.findOne({ _id: toObjectId(id) });
+    if (!complaint) {
+      return res.status(404).json({ message: "Complaint not found" });
+    }
+
+    const previousStaffId = complaint.assignedTo;
+    const now = new Date();
+
+    await Complaints.updateOne(
+      { _id: toObjectId(id) },
+      { 
+        $set: {
+          assignedTo: null,
+          assignedToName: null,
+          assignedToEmail: null,
+          status: "Pending",
+          updatedAt: now,
+        },
+        $push: { 
+          timeline: {
+            status: "Unassigned",
+            timestamp: now,
+            message: `Unassigned from staff${reason ? `: ${reason}` : ''}`,
+            by: req.user.userId,
+          }
+        }
+      }
+    );
+
+    // Decrease staff count
+    if (previousStaffId) {
+      await db.collection("Staff").updateOne(
+        { _id: toObjectId(previousStaffId) },
+        { $inc: { complaintsAssigned: -1 } }
+      );
+    }
+
+    await AdminLogs.insertOne({
+      adminId: req.user.userId,
+      action: "UNASSIGN_COMPLAINT",
+      complaintId: id,
+      details: { previousStaffId, reason },
+      timestamp: now,
+    });
+
+    res.json({
+      success: true,
+      message: "Complaint unassigned",
+    });
+  } catch (error) {
+    console.error("Error unassigning complaint:", error);
+    res.status(500).json({ message: "Failed to unassign complaint" });
+  }
+});
+
+// GET: Complaints assigned to specific staff
+app.get("/api/staff/:staffId/complaints", auth, requireRole("admin"), async (req, res) => {
+  try {
+    const { staffId } = req.params;
+
+    if (!ObjectId.isValid(staffId)) {
+      return res.status(400).json({ message: "Invalid staff ID" });
+    }
+
+    const complaints = await Complaints.find({ assignedTo: staffId })
+      .sort({ updatedAt: -1 })
+      .toArray();
+
+    res.json({
+      success: true,
+      count: complaints.length,
+      data: complaints,
+    });
+  } catch (error) {
+    console.error("Error fetching staff complaints:", error);
+    res.status(500).json({ message: "Failed to fetch complaints" });
+  }
+});
+
+// GET: Assignment stats
+app.get("/api/complaints/admin/assignment-stats", auth, requireRole("admin"), async (req, res) => {
+  try {
+    const total = await Complaints.countDocuments();
+    const assigned = await Complaints.countDocuments({ assignedTo: { $ne: null } });
+    const unassigned = await Complaints.countDocuments({ 
+      $or: [{ assignedTo: null }, { assignedTo: { $exists: false } }]
+    });
+    const pending = await Complaints.countDocuments({ status: "Pending" });
+    const inProgress = await Complaints.countDocuments({ status: "In Progress" });
+    const assignedStatus = await Complaints.countDocuments({ status: "Assigned" });
+    const resolved = await Complaints.countDocuments({ status: "Resolved" });
+
+    // Staff with most assignments
+    const topStaff = await Complaints.aggregate([
+      { $match: { assignedTo: { $ne: null } } },
+      { $group: { _id: "$assignedToName", count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 5 }
+    ]).toArray();
+
+    res.json({
+      success: true,
+      data: {
+        total,
+        assigned,
+        unassigned,
+        byStatus: { pending, assigned: assignedStatus, inProgress, resolved },
+        topStaff,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching assignment stats:", error);
+    res.status(500).json({ message: "Failed to fetch stats" });
+  }
+});
 // ---------- 404 & ERROR HANDLERS ----------
 app.use((req, res) => {
   res.status(404).json({ message: "URL not found" });

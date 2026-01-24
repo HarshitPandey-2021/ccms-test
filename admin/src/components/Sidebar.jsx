@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
+import { RiGroupLine } from 'react-icons/ri';
 import {
   RiDashboardLine,
   RiFileListLine,
@@ -12,6 +13,7 @@ import {
   RiCloseLine,
   RiTeamLine,
   RiBuildingLine, // ✅ NEW ICON
+  
 } from 'react-icons/ri';
 import { getAdminUser, logoutAdmin } from '../utils/tokenUtils';
 import { useToast } from '../hooks/useToast';
@@ -64,6 +66,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
     { path: '/dashboard', label: 'Dashboard', icon: RiDashboardLine },
     { path: '/complaints', label: 'Complaints', icon: RiFileListLine },
     { path: '/departments', label: 'Departments', icon: RiBuildingLine }, // ✅ NEW
+     { path: '/staff', label: 'Staff', icon: RiGroupLine },
     { path: '/analytics', label: 'Analytics', icon: RiBarChartLine },
     { path: '/students', label: 'Students', icon: RiTeamLine },
     { path: '/activity-logs', label: 'Activity Logs', icon: RiHistoryLine },

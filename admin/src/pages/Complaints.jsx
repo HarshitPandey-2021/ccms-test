@@ -1,9 +1,10 @@
-// src/pages/Complaints.jsx - Mobile Responsive
+// src/pages/Complaints.jsx - Mobile Responsive with Assignment
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import ComplaintFilters from "../components/ComplaintFilters";
 import ComplaintTable from "../components/complaintTable/ComplaintTable";
 import ComplaintDetails from "../components/ComplaintDetails";
+import AssignmentModal from "../components/AssignmentModal"; // ✅ NEW
 import Loading from "../components/Loading";
 import EmptyState from "../components/EmptyState";
 import { useToast } from "../hooks/useToast";
@@ -19,6 +20,7 @@ import {
   RiCloseLine,
   RiFilterLine,
   RiRefreshLine,
+  RiUserAddLine, // ✅ NEW
 } from "react-icons/ri";
 import { exportToCSV, exportToPrint } from "../utils/exportUtils";
 import { logActivity, ACTIVITY_TYPES } from "../services/activityLogger";
@@ -29,6 +31,10 @@ const Complaints = () => {
 
   // Mobile filter toggle
   const [showMobileFilters, setShowMobileFilters] = useState(false);
+
+  // ✅ NEW: Assignment modal state
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [assigningComplaint, setAssigningComplaint] = useState(null);
 
   // Initialize filters
   const initialFilters = useMemo(() => {
@@ -88,11 +94,13 @@ const Complaints = () => {
         const desc = (c.description || "").toString().toLowerCase();
         const cat = (c.category || c.department || "").toString().toLowerCase();
         const loc = (c.location || "").toString().toLowerCase();
+        const assigned = (c.assignedToName || "").toString().toLowerCase(); // ✅ NEW
         return (
           title.includes(term) ||
           desc.includes(term) ||
           cat.includes(term) ||
-          loc.includes(term)
+          loc.includes(term) ||
+          assigned.includes(term) // ✅ NEW
         );
       });
     }
@@ -200,7 +208,6 @@ const Complaints = () => {
       ...prev,
       ...newFilters,
     }));
-    // Auto-close mobile filter on filter change
     setShowMobileFilters(false);
   }, []);
 
@@ -255,7 +262,27 @@ const Complaints = () => {
     [openComplaintDetails]
   );
 
-  // Handle action click
+  // ✅ NEW: Handle assign click
+  const handleAssignClick = useCallback((complaint) => {
+    setAssigningComplaint(complaint);
+    setShowAssignModal(true);
+  }, []);
+
+  // ✅ NEW: Handle assignment complete
+  const handleAssignmentComplete = useCallback(async () => {
+    setShowAssignModal(false);
+    setAssigningComplaint(null);
+    success("✅ Complaint assigned successfully!");
+    
+    // Refresh complaints
+    const refreshed = await getAllComplaints();
+    if (Array.isArray(refreshed)) {
+      setComplaints(refreshed);
+      applyFilters(refreshed, filters);
+    }
+  }, [filters, applyFilters, success]);
+
+  // Handle action click - ✅ UPDATED
   const handleActionClick = useCallback(
     (action, complaint) => {
       if (!complaint?._id) return;
@@ -264,9 +291,11 @@ const Complaints = () => {
         openComplaintDetails(complaint._id, false);
       } else if (action === "edit") {
         openComplaintDetails(complaint._id, true);
+      } else if (action === "assign") {
+        handleAssignClick(complaint);
       }
     },
-    [openComplaintDetails]
+    [openComplaintDetails, handleAssignClick]
   );
 
   // Handle status update
@@ -298,7 +327,6 @@ const Complaints = () => {
           setSelectedComplaint(null);
           setIsEditMode(false);
 
-          // Refresh complaints
           const refreshed = await getAllComplaints();
           if (Array.isArray(refreshed)) {
             setComplaints(refreshed);
@@ -405,6 +433,13 @@ const Complaints = () => {
     return "complaints";
   };
 
+  // ✅ NEW: Calculate assignment stats
+  const assignmentStats = useMemo(() => {
+    const assigned = complaints.filter(c => c.assignedTo).length;
+    const unassigned = complaints.filter(c => !c.assignedTo && c.status !== 'Resolved' && c.status !== 'Rejected').length;
+    return { assigned, unassigned };
+  }, [complaints]);
+
   if (isLoading) {
     return (
       <div className="p-4 sm:p-6 lg:p-8">
@@ -414,7 +449,7 @@ const Complaints = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-20 md:pb-8"> {/* Extra padding for mobile nav */}
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-20 md:pb-8">
       <div className="p-4 sm:p-6 lg:p-8">
         {/* Page Header */}
         <div className="mb-4 sm:mb-6">
@@ -424,7 +459,12 @@ const Complaints = () => {
                 Manage Complaints
               </h1>
               <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-1">
-                Filter and manage campus complaints
+                {assignmentStats.unassigned > 0 && (
+                  <span className="text-amber-600 dark:text-amber-400 font-medium">
+                    {assignmentStats.unassigned} unassigned • 
+                  </span>
+                )}{" "}
+                {complaints.length} total complaints
               </p>
             </div>
             {/* Mobile Filter Toggle */}
@@ -437,6 +477,24 @@ const Complaints = () => {
             </button>
           </div>
         </div>
+
+        {/* ✅ NEW: Unassigned Alert */}
+        {assignmentStats.unassigned > 0 && (
+          <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <RiUserAddLine className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              <p className="text-sm text-amber-800 dark:text-amber-200">
+                <span className="font-semibold">{assignmentStats.unassigned}</span> complaint{assignmentStats.unassigned !== 1 ? 's' : ''} pending assignment
+              </p>
+            </div>
+            <button
+              onClick={() => handleFilterChange({ status: 'Pending' })}
+              className="text-sm font-medium text-amber-700 dark:text-amber-300 hover:underline"
+            >
+              View all →
+            </button>
+          </div>
+        )}
 
         {/* Desktop Filters (always visible) */}
         <div className="hidden md:block mb-4">
@@ -496,6 +554,8 @@ const Complaints = () => {
                 ? "border-blue-600 bg-blue-50 dark:bg-blue-900/20"
                 : filters.status === "In Progress"
                 ? "border-yellow-600 bg-yellow-50 dark:bg-yellow-900/20"
+                : filters.status === "Assigned"
+                ? "border-purple-600 bg-purple-50 dark:bg-purple-900/20"
                 : "border-red-600 bg-red-50 dark:bg-red-900/20"
             }`}
           >
@@ -507,6 +567,8 @@ const Complaints = () => {
                   ? "⏳"
                   : filters.status === "In Progress"
                   ? "🔧"
+                  : filters.status === "Assigned"
+                  ? "👤"
                   : "❌"}
               </span>
               <div className="flex-1 min-w-0">
@@ -581,6 +643,7 @@ const Complaints = () => {
             complaints={filteredComplaints}
             onRowClick={handleRowClick}
             onActionClick={handleActionClick}
+            onAssignClick={handleAssignClick} // ✅ NEW
           />
         )}
       </div>
@@ -594,6 +657,19 @@ const Complaints = () => {
           onStatusUpdate={handleStatusUpdate}
           onComplaintUpdate={handleComplaintUpdate}
           isEditMode={isEditMode}
+          onAssignClick={() => handleAssignClick(selectedComplaint)} // ✅ NEW
+        />
+      )}
+
+      {/* ✅ NEW: Assignment Modal */}
+      {showAssignModal && assigningComplaint && (
+        <AssignmentModal
+          complaint={assigningComplaint}
+          onClose={() => {
+            setShowAssignModal(false);
+            setAssigningComplaint(null);
+          }}
+          onAssigned={handleAssignmentComplete}
         />
       )}
     </div>

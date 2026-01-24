@@ -283,6 +283,97 @@ export async function deleteDepartment(id) {
 }
 
 // ============================================
+// STAFF (Add after Departments section)
+// ============================================
+
+export async function getStaff(departmentId = null) {
+  try {
+    const url = departmentId 
+      ? `${API_BASE}/staff?department=${departmentId}`
+      : `${API_BASE}/staff`;
+    const res = await apiCall(url);
+    return handleResponse(res);
+  } catch {
+    return { data: [] };
+  }
+}
+
+export async function getStaffByDepartment(departmentId) {
+  const res = await apiCall(`${API_BASE}/staff/department/${departmentId}`);
+  return handleResponse(res);
+}
+
+export async function getStaffById(id) {
+  const res = await apiCall(`${API_BASE}/staff/${id}`);
+  return handleResponse(res);
+}
+
+export async function createStaff(data) {
+  const res = await apiCall(`${API_BASE}/staff`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return handleResponse(res);
+}
+
+export async function updateStaff(id, data) {
+  const res = await apiCall(`${API_BASE}/staff/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+  return handleResponse(res);
+}
+
+export async function deleteStaff(id) {
+  const res = await apiCall(`${API_BASE}/staff/${id}`, {
+    method: "DELETE",
+  });
+  return handleResponse(res);
+}
+
+// ============================================
+// COMPLAINT ASSIGNMENT
+// ============================================
+
+export async function assignComplaint(complaintId, staffId, priority = null, remarks = null) {
+  const body = { staffId };
+  if (priority) body.priority = priority;
+  if (remarks) body.remarks = remarks;
+
+  const res = await apiCall(`${API_BASE}/complaints/${complaintId}/assign`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  return handleResponse(res);
+}
+
+export async function reassignComplaint(complaintId, staffId, reason = null) {
+  const res = await apiCall(`${API_BASE}/complaints/${complaintId}/reassign`, {
+    method: "PUT",
+    body: JSON.stringify({ staffId, reason }),
+  });
+  return handleResponse(res);
+}
+
+export async function unassignComplaint(complaintId, reason = null) {
+  const res = await apiCall(`${API_BASE}/complaints/${complaintId}/unassign`, {
+    method: "PUT",
+    body: JSON.stringify({ reason }),
+  });
+  return handleResponse(res);
+}
+
+export async function getStaffComplaints(staffId) {
+  const res = await apiCall(`${API_BASE}/staff/${staffId}/complaints`);
+  return handleResponse(res);
+}
+
+export async function getAssignmentStats() {
+  const res = await apiCall(`${API_BASE}/complaints/admin/assignment-stats`);
+  return handleResponse(res);
+}
+
+// ============================================
 // PROFILE
 // ============================================
 
@@ -339,11 +430,6 @@ export async function getAllLogs() {
 export async function logout() {
   logoutAdmin();
 }
-
-// ============================================
-// DEFAULT EXPORT
-// ============================================
-
 const api = {
   // Complaints
   getAllComplaints,
@@ -355,12 +441,27 @@ const api = {
   markComplaintAsRead,
   getTrends,
   
+  // Complaint Assignment - NEW
+  assignComplaint,
+  reassignComplaint,
+  unassignComplaint,
+  getStaffComplaints,
+  getAssignmentStats,
+  
   // Departments
   getDepartments,
   getDepartmentById,
   createDepartment,
   updateDepartment,
   deleteDepartment,
+  
+  // Staff
+  getStaff,
+  getStaffByDepartment,
+  getStaffById,
+  createStaff,
+  updateStaff,
+  deleteStaff,
   
   // Profile
   getProfile,

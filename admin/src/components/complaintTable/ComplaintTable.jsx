@@ -3,12 +3,18 @@ import React, { useState, useMemo, useEffect } from "react";
 import Badge from "../Badge";
 import EmptyState from "../EmptyState";
 import SortIcon from "./SortIcon";
-import { RiEyeLine, RiEditLine } from "react-icons/ri";
+import { 
+  RiEyeLine, 
+  RiEditLine, 
+  RiUserAddLine,  // ✅ NEW: For assign button
+  RiUserLine,     // ✅ NEW: For assigned indicator
+} from "react-icons/ri";
 
 export default function ComplaintTable({
   complaints = [],
   onRowClick,
   onActionClick,
+  onAssignClick, // ✅ NEW PROP
 }) {
   const [sortConfig, setSortConfig] = useState({
     key: "submittedAt",
@@ -96,10 +102,16 @@ export default function ComplaintTable({
     return <Badge status="Unknown" />;
   };
 
+  // ✅ NEW: Check if complaint can be assigned
+  const canAssign = (complaint) => {
+    const status = complaint.status || complaint.Status;
+    return status !== "Resolved" && status !== "Rejected";
+  };
+
   // ===== MOBILE CARD VIEW =====
   if (isMobile) {
     return (
-      <div className="space-y-4 pb-20"> {/* Added padding for bottom nav */}
+      <div className="space-y-4 pb-20">
         {sortedComplaints.map((complaint, index) => {
           const id = complaint._id || complaint.id || index + 1;
           const subject = complaint.subject || complaint.title || "Untitled";
@@ -110,6 +122,7 @@ export default function ComplaintTable({
           const dateValue = complaint.submittedAt || complaint.createdAt;
           const status = complaint.status || complaint.Status;
           const priority = complaint.priority || complaint.Priority;
+          const assignedToName = complaint.assignedToName; // ✅ NEW
 
           return (
             <div
@@ -129,6 +142,16 @@ export default function ComplaintTable({
                 {subject}
               </h3>
 
+              {/* ✅ NEW: Assigned To Badge */}
+              {assignedToName && (
+                <div className="flex items-center gap-2 px-2.5 py-1.5 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
+                  <RiUserLine className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                  <span className="text-sm font-medium text-purple-700 dark:text-purple-300">
+                    {assignedToName}
+                  </span>
+                </div>
+              )}
+
               {/* Meta Grid */}
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div>
@@ -140,6 +163,14 @@ export default function ComplaintTable({
                   <div className="mt-1">{getPriorityBadge(priority)}</div>
                 </div>
               </div>
+
+              {/* ✅ NEW: Department Badge */}
+              {complaint.departmentName && (
+                <div className="text-sm">
+                  <span className="text-gray-500 dark:text-gray-400 text-xs">Department</span>
+                  <p className="font-medium text-blue-600 dark:text-blue-400">{complaint.departmentName}</p>
+                </div>
+              )}
 
               {/* Submitted By */}
               <div className="text-sm">
@@ -162,9 +193,28 @@ export default function ComplaintTable({
                   className="flex-1 flex items-center justify-center gap-2 bg-indigo-600 text-white py-2.5 rounded-lg font-medium hover:bg-indigo-700 active:bg-indigo-800 transition-colors shadow-sm"
                 >
                   <RiEyeLine size={18} />
-                  View Details
+                  View
                 </button>
-                {(status === "Pending" || status === "In Progress") && (
+                
+                {/* ✅ NEW: Assign Button */}
+                {canAssign(complaint) && onAssignClick && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onAssignClick(complaint);
+                    }}
+                    className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-colors shadow-sm ${
+                      assignedToName
+                        ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-900/50'
+                        : 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/50'
+                    }`}
+                    title={assignedToName ? 'Reassign' : 'Assign'}
+                  >
+                    <RiUserAddLine size={18} />
+                  </button>
+                )}
+
+                {(status === "Pending" || status === "In Progress" || status === "Assigned") && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -189,7 +239,7 @@ export default function ComplaintTable({
     { key: "subject", label: "Subject", sortable: true },
     { key: "submittedBy", label: "Submitted", sortable: false },
     { key: "category", label: "Category", sortable: true },
-    { key: "location", label: "Location", sortable: false },
+    { key: "assignedTo", label: "Assigned To", sortable: false }, // ✅ NEW COLUMN
     { key: "submittedAt", label: "Date", sortable: true },
     { key: "status", label: "Status", sortable: false },
     { key: "priority", label: "Priority", sortable: true },
@@ -230,10 +280,11 @@ export default function ComplaintTable({
               ? "Anonymous 🕵️"
               : complaint.submittedBy || complaint.name || complaint.email;
             const category = complaint.category || complaint.department || "General";
-            const location = complaint.location || "N/A";
             const dateValue = complaint.submittedAt || complaint.createdAt;
             const status = complaint.status || complaint.Status;
             const priority = complaint.priority || complaint.Priority;
+            const assignedToName = complaint.assignedToName; // ✅ NEW
+            const departmentName = complaint.departmentName; // ✅ NEW
 
             return (
               <tr
@@ -249,9 +300,17 @@ export default function ComplaintTable({
                     <span className="font-medium text-gray-800 dark:text-gray-100 line-clamp-2">
                       {subject}
                     </span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400">
-                      {complaint.complaintId || ""}
-                    </span>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        {complaint.complaintId || ""}
+                      </span>
+                      {/* ✅ NEW: Department Tag */}
+                      {departmentName && (
+                        <span className="text-xs px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded">
+                          {departmentName}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-200">
@@ -260,8 +319,22 @@ export default function ComplaintTable({
                 <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-200">
                   {category}
                 </td>
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-200">
-                  {location}
+                {/* ✅ NEW: Assigned To Column */}
+                <td className="px-4 py-3 whitespace-nowrap">
+                  {assignedToName ? (
+                    <div className="flex items-center gap-2">
+                      <div className="h-7 w-7 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white text-xs font-medium">
+                        {assignedToName.charAt(0).toUpperCase()}
+                      </div>
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        {assignedToName}
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-sm text-gray-400 dark:text-gray-500 italic">
+                      Not assigned
+                    </span>
+                  )}
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-200">
                   {formatDate(dateValue)}
@@ -273,20 +346,39 @@ export default function ComplaintTable({
                   {getPriorityBadge(priority)}
                 </td>
                 <td
-                  className="px-4 py-3 whitespace-nowrap text-right"
+                  className="px-4 py-3 whitespace-nowrap"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {/* ✅ ONLY VIEW BUTTON - No 3-dot menu */}
-                  <button
-                    onClick={() => {
-                      console.log("👁️ View clicked for:", id);
-                      onActionClick && onActionClick("view", complaint);
-                    }}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 active:bg-indigo-800 transition-colors shadow-sm hover:shadow-md"
-                  >
-                    <RiEyeLine size={16} />
-                    View
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {/* View Button */}
+                    <button
+                      onClick={() => {
+                        console.log("👁️ View clicked for:", id);
+                        onActionClick && onActionClick("view", complaint);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 active:bg-indigo-800 transition-colors"
+                      title="View Details"
+                    >
+                      <RiEyeLine size={16} />
+                      View
+                    </button>
+
+                    {/* ✅ NEW: Assign/Reassign Button */}
+                    {canAssign(complaint) && onAssignClick && (
+                      <button
+                        onClick={() => onAssignClick(complaint)}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                          assignedToName
+                            ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-900/50'
+                            : 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/50'
+                        }`}
+                        title={assignedToName ? 'Reassign' : 'Assign'}
+                      >
+                        <RiUserAddLine size={16} />
+                        {assignedToName ? 'Reassign' : 'Assign'}
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             );
