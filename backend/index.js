@@ -2556,7 +2556,225 @@ app.get(
     }
   }
 );
+// ============================================
+// DEPARTMENT MANAGEMENT ENDPOINTS
+// ============================================
 
+// GET: All departments
+app.get("/api/departments", async (req, res) => {
+  try {
+    const departments = await Departments.find({ isActive: { $ne: false } })
+      .sort({ name: 1 })
+      .toArray();
+
+    res.json({
+      success: true,
+      count: departments.length,
+      data: departments,
+    });
+  } catch (error) {
+    console.error("Error fetching departments:", error);
+    res.status(500).json({ message: "Failed to fetch departments" });
+  }
+});
+
+// GET: Single department
+app.get("/api/departments/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid department ID" });
+    }
+
+    const department = await Departments.findOne({ _id: toObjectId(id) });
+
+    if (!department) {
+      return res.status(404).json({ message: "Department not found" });
+    }
+
+    res.json({ success: true, data: department });
+  } catch (error) {
+    console.error("Error fetching department:", error);
+    res.status(500).json({ message: "Failed to fetch department" });
+  }
+});
+
+// POST: Create department (Admin only)
+app.post("/api/departments", auth, requireRole("admin"), async (req, res) => {
+  try {
+    const { name, description, categories, headName, headEmail, headPhone } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ message: "Department name is required" });
+    }
+
+    // Check if department already exists
+    const existing = await Departments.findOne({ 
+      name: { $regex: new RegExp(`^${name.trim()}$`, 'i') } 
+    });
+
+    if (existing) {
+      return res.status(400).json({ message: "Department with this name already exists" });
+    }
+
+    const now = new Date();
+    const department = {
+      name: name.trim(),
+      description: description?.trim() || "",
+      categories: Array.isArray(categories) ? categories : [],
+      headName: headName?.trim() || "",
+      headEmail: headEmail?.trim() || "",
+      headPhone: headPhone?.trim() || "",
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const result = await Departments.insertOne(department);
+
+    await AdminLogs.insertOne({
+      adminId: req.user.userId,
+      action: "CREATE_DEPARTMENT",
+      details: { departmentId: result.insertedId, name: department.name },
+      timestamp: now,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Department created successfully",
+      data: { ...department, _id: result.insertedId },
+    });
+  } catch (error) {
+    console.error("Error creating department:", error);
+    res.status(500).json({ message: "Failed to create department" });
+  }
+});
+
+// PUT: Update department (Admin only)
+app.put("/api/departments/:id", auth, requireRole("admin"), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, description, categories, headName, headEmail, headPhone, isActive } = req.body;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid department ID" });
+    }
+
+    const existing = await Departments.findOne({ _id: toObjectId(id) });
+    if (!existing) {
+      return res.status(404).json({ message: "Department not found" });
+    }
+
+    // Check if new name conflicts with another department
+    if (name && name.trim().toLowerCase() !== existing.name.toLowerCase()) {
+      const nameConflict = await Departments.findOne({
+        _id: { $ne: toObjectId(id) },
+        name: { $regex: new RegExp(`^${name.trim()}$`, 'i') },
+      });
+      if (nameConflict) {
+        return res.status(400).json({ message: "Another department with this name exists" });
+      }
+    }
+
+    const updateFields = {
+      updatedAt: new Date(),
+    };
+
+    if (name !== undefined) updateFields.name = name.trim();
+    if (description !== undefined) updateFields.description = description.trim();
+    if (categories !== undefined) updateFields.categories = Array.isArray(categories) ? categories : [];
+    if (headName !== undefined) updateFields.headName = headName.trim();
+    if (headEmail !== undefined) updateFields.headEmail = headEmail.trim();
+    if (headPhone !== undefined) updateFields.headPhone = headPhone.trim();
+    if (isActive !== undefined) updateFields.isActive = isActive;
+
+    await Departments.updateOne(
+      { _id: toObjectId(id) },
+      { $set: updateFields }
+    );
+
+    await AdminLogs.insertOne({
+      adminId: req.user.userId,
+      action: "UPDATE_DEPARTMENT",
+      details: { departmentId: id, updates: updateFields },
+      timestamp: new Date(),
+    });
+
+    const updated = await Departments.findOne({ _id: toObjectId(id) });
+
+    res.json({
+      success: true,
+      message: "Department updated successfully",
+      data: updated,
+    });
+  } catch (error) {
+    console.error("Error updating department:", error);
+    res.status(500).json({ message: "Failed to update department" });
+  }
+});
+
+// DELETE: Delete department (Admin only) - Soft delete
+app.delete("/api/departments/:id", auth, requireRole("admin"), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid department ID" });
+    }
+
+    const existing = await Departments.findOne({ _id: toObjectId(id) });
+    if (!existing) {
+      return res.status(404).json({ message: "Department not found" });
+    }
+
+    // Soft delete
+    await Departments.updateOne(
+      { _id: toObjectId(id) },
+      { $set: { isActive: false, updatedAt: new Date() } }
+    );
+
+    await AdminLogs.insertOne({
+      adminId: req.user.userId,
+      action: "DELETE_DEPARTMENT",
+      details: { departmentId: id, name: existing.name },
+      timestamp: new Date(),
+    });
+
+    res.json({
+      success: true,
+      message: "Department deleted successfully",
+    });
+  } catch (error) {
+    console.error("Error deleting department:", error);
+    res.status(500).json({ message: "Failed to delete department" });
+  }
+});
+
+// GET: Department categories (for dropdowns)
+app.get("/api/departments/:id/categories", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid department ID" });
+    }
+
+    const department = await Departments.findOne({ _id: toObjectId(id) });
+
+    if (!department) {
+      return res.status(404).json({ message: "Department not found" });
+    }
+
+    res.json({
+      success: true,
+      data: department.categories || [],
+    });
+  } catch (error) {
+    console.error("Error fetching categories:", error);
+    res.status(500).json({ message: "Failed to fetch categories" });
+  }
+});
 
 // ---------- 404 & ERROR HANDLERS ----------
 app.use((req, res) => {

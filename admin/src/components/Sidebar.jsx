@@ -1,4 +1,4 @@
-// admin/src/components/Sidebar.jsx - FIXED MOBILE POSITIONING
+// admin/src/components/Sidebar.jsx
 
 import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
@@ -11,6 +11,7 @@ import {
   RiLogoutBoxLine,
   RiCloseLine,
   RiTeamLine,
+  RiBuildingLine, // ✅ NEW ICON
 } from 'react-icons/ri';
 import { getAdminUser, logoutAdmin } from '../utils/tokenUtils';
 import { useToast } from '../hooks/useToast';
@@ -22,7 +23,6 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
   const { success } = useToast();
   const adminUser = getAdminUser();
 
-  // Detect screen size changes
   useEffect(() => {
     const handleResize = () => {
       const mobile = window.innerWidth < 768;
@@ -33,7 +33,6 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Prevent body scroll when mobile sidebar is open
   useEffect(() => {
     if (isMobile && isOpen) {
       document.body.style.overflow = 'hidden';
@@ -60,9 +59,11 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
     }
   };
 
+  // ✅ UPDATED: Added Departments
   const navItems = [
     { path: '/dashboard', label: 'Dashboard', icon: RiDashboardLine },
     { path: '/complaints', label: 'Complaints', icon: RiFileListLine },
+    { path: '/departments', label: 'Departments', icon: RiBuildingLine }, // ✅ NEW
     { path: '/analytics', label: 'Analytics', icon: RiBarChartLine },
     { path: '/students', label: 'Students', icon: RiTeamLine },
     { path: '/activity-logs', label: 'Activity Logs', icon: RiHistoryLine },
@@ -71,7 +72,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
 
   return (
     <>
-      {/* Mobile Backdrop - z-40 (below sidebar) */}
+      {/* Mobile Backdrop */}
       {isMobile && isOpen && (
         <div
           className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 md:hidden"
@@ -80,7 +81,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
         />
       )}
 
-      {/* Sidebar - z-50 on mobile (above navbar when open) */}
+      {/* Sidebar */}
       <aside
         className={`
           fixed md:static 
@@ -95,7 +96,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
           pt-0 md:pt-0
         `}
       >
-        {/* Logo/Header - Visible on mobile when sidebar is open */}
+        {/* Logo/Header */}
         <div className="flex-shrink-0 p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
           <div className="flex items-center justify-between">
             <div className="min-w-0 flex-1">
@@ -106,7 +107,6 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                 {adminUser?.name || 'Administrator'}
               </p>
             </div>
-            {/* Mobile Close Button */}
             {isMobile && (
               <button
                 onClick={toggleSidebar}
@@ -119,7 +119,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
           </div>
         </div>
 
-        {/* Navigation Links - Scrollable area with proper padding */}
+        {/* Navigation Links */}
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto overscroll-contain">
           {navItems.map((item) => {
             const Icon = item.icon;

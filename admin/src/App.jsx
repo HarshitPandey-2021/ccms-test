@@ -4,11 +4,12 @@ import { BrowserRouter as Router, Routes, Route, useLocation, Navigate, useNavig
 import Navbar from "./components/Navbar.jsx";
 import Sidebar from "./components/Sidebar.jsx";
 import Breadcrumb from "./components/Breadcrumb.jsx";
-import BottomNavigation from "./components/BottomNavigation.jsx"; // ✅ NEW
+import BottomNavigation from "./components/BottomNavigation.jsx";
 import AuthInitializer from "./components/AuthInitializer.jsx";
 import useKeyboardShortcuts from "./hooks/useKeyboardShortcuts.js";
 import { ToastProvider } from "./context/ToastContext.jsx";
-import ManageStudents from "./pages/ManageStudents.jsx"; // ✅ ADD THIS IMPORT
+import ManageStudents from "./pages/ManageStudents.jsx";
+import Departments from "./pages/Departments.jsx"; // ✅ NEW IMPORT
 import {
   initializeActivityLogger,
   logActivity,
@@ -30,19 +31,20 @@ function getPageName(path) {
     "/dashboard": "Dashboard",
     "/complaints": "Complaints",
     "/analytics": "Analytics",
-     "/students": "Students", // ✅ ADD THIS
+    "/students": "Students",
+    "/departments": "Departments", // ✅ NEW
     "/activity-logs": "Activity Logs",
     "/profile": "Profile",
   };
   return routes[path] || "Unknown Page";
 }
 
-// ✅ Handle refresh 404 issue
+// Handle refresh 404 issue
 function RouteHandler() {
   const navigate = useNavigate();
   
   useEffect(() => {
-    const validRoutes = ['/', '/dashboard', '/complaints', '/analytics', '/students', '/activity-logs', '/profile', '/unauthorized']; // ✅ ADD /students
+    const validRoutes = ['/', '/dashboard', '/complaints', '/analytics', '/students', '/departments', '/activity-logs', '/profile', '/unauthorized']; // ✅ ADDED /departments
     const currentPath = window.location.pathname;
     
     if (!validRoutes.includes(currentPath)) {
@@ -116,7 +118,7 @@ function AppContent() {
     function handleResize() {
       const mobile = window.innerWidth < 768;
       setIsMobile(mobile);
-      setSidebarOpen(!mobile); // Auto-open on desktop, closed on mobile
+      setSidebarOpen(!mobile);
     }
     
     handleResize();
@@ -180,24 +182,31 @@ function AppContent() {
                   </ProtectedRoute>
                 }
               />
+              <Route
+                path="/students"
+                element={
+                  <ProtectedRoute>
+                    <ManageStudents />
+                  </ProtectedRoute>
+                }
+              />
               {/* ✅ NEW ROUTE */}
-<Route
-  path="/students"
-  element={
-    <ProtectedRoute>
-      <ManageStudents />
-    </ProtectedRoute>
-  }
-/>
-<Route
-  path="/activity-logs"
-  element={
-    <ProtectedRoute>
-      <ActivityLogs />
-    </ProtectedRoute>
-  }
-/>
-              
+              <Route
+                path="/departments"
+                element={
+                  <ProtectedRoute>
+                    <Departments />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/activity-logs"
+                element={
+                  <ProtectedRoute>
+                    <ActivityLogs />
+                  </ProtectedRoute>
+                }
+              />
               <Route
                 path="/profile"
                 element={
@@ -237,7 +246,7 @@ function AppContent() {
             </Routes>
           </main>
 
-          {/* ✅ Bottom Navigation (Mobile Only) */}
+          {/* Bottom Navigation (Mobile Only) */}
           <BottomNavigation />
         </div>
       </div>

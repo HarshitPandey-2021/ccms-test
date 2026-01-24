@@ -109,7 +109,10 @@ async function handleResponse(res) {
   return data;
 }
 
-// Complaints
+// ============================================
+// COMPLAINTS
+// ============================================
+
 export async function getAllComplaints() {
   try {
     let res = await apiCall(`${API_BASE}/complaints/admin/all`);
@@ -146,7 +149,6 @@ export async function getStats() {
   return handleResponse(res);
 }
 
-// ✅ YOUR ORIGINAL WORKING CODE - KEPT AS IS
 export async function getComplaintById(id) {
   const routesToTry = [
     `${API_BASE}/complaints/admin/${id}`,
@@ -170,13 +172,11 @@ export async function getComplaintById(id) {
   throw new Error('Complaint not found - all routes failed');
 }
 
-// ✅ FIXED: Update complaint STATUS (resolve, reject, start work)
 export async function updateComplaintStatus(id, status, adminRemarks, assignedTo = null) {
   const body = { status };
   if (adminRemarks) body.adminRemarks = adminRemarks;
   if (assignedTo) body.assignedTo = assignedTo;
 
-  // Try multiple routes (same pattern as getComplaintById)
   const routesToTry = [
     `${API_BASE}/complaints/admin/${id}/status`,
     `${API_BASE}/admin/complaints/${id}/status`,
@@ -200,14 +200,11 @@ export async function updateComplaintStatus(id, status, adminRemarks, assignedTo
   throw new Error('Failed to update status - all routes failed');
 }
 
-// ✅ FIXED: Update complaint DETAILS (edit title, description, etc.)
 export async function updateComplaint(id, updates) {
-  // If only status is being updated, use status endpoint
   if (updates && Object.keys(updates).length === 1 && updates.status) {
     return updateComplaintStatus(id, updates.status);
   }
 
-  // Try multiple routes for editing complaint details
   const routesToTry = [
     `${API_BASE}/complaints/admin/${id}`,
     `${API_BASE}/admin/complaints/${id}`,
@@ -239,7 +236,56 @@ export async function markComplaintAsRead(id) {
   return handleResponse(res);
 }
 
-// Profile
+export async function getTrends(days = 7) {
+  const res = await apiCall(`${API_BASE}/complaints/admin/trends?days=${days}`);
+  return handleResponse(res);
+}
+
+// ============================================
+// DEPARTMENTS
+// ============================================
+
+export async function getDepartments() {
+  try {
+    const res = await apiCall(`${API_BASE}/departments`);
+    return handleResponse(res);
+  } catch {
+    return { data: [] };
+  }
+}
+
+export async function getDepartmentById(id) {
+  const res = await apiCall(`${API_BASE}/departments/${id}`);
+  return handleResponse(res);
+}
+
+export async function createDepartment(data) {
+  const res = await apiCall(`${API_BASE}/departments`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return handleResponse(res);
+}
+
+export async function updateDepartment(id, data) {
+  const res = await apiCall(`${API_BASE}/departments/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+  return handleResponse(res);
+}
+
+export async function deleteDepartment(id) {
+  const res = await apiCall(`${API_BASE}/departments/${id}`, {
+    method: "DELETE",
+  });
+  return handleResponse(res);
+}
+
+// ============================================
+// PROFILE
+// ============================================
+
 export async function getProfile() {
   const res = await apiCall(`${API_BASE}/profile`);
   return handleResponse(res);
@@ -261,28 +307,10 @@ export async function changePassword(currentPassword, newPassword) {
   return handleResponse(res);
 }
 
-// Departments
-export async function getDepartments() {
-  try {
-    const res = await apiCall(`${API_BASE}/departments`);
-    return handleResponse(res);
-  } catch {
-    return [];
-  }
-}
+// ============================================
+// STUDENTS
+// ============================================
 
-// Admin logs
-export async function getAllLogs() {
-  const res = await apiCall(`${API_BASE}/admin/logs`);
-  return handleResponse(res);
-}
-
-export async function logout() {
-  logoutAdmin();
-}
-// api.js - ADD THESE FUNCTIONS AT THE END
-
-// ✅ NEW: Search student by roll number
 export async function searchStudent(rollNo) {
   const res = await apiCall(`${API_BASE}/admin/students/search`, {
     method: "POST",
@@ -291,7 +319,6 @@ export async function searchStudent(rollNo) {
   return handleResponse(res);
 }
 
-// ✅ NEW: Reset student registration
 export async function resetStudent(rollNo) {
   const res = await apiCall(`${API_BASE}/admin/students/reset`, {
     method: "POST",
@@ -299,13 +326,26 @@ export async function resetStudent(rollNo) {
   });
   return handleResponse(res);
 }
-export async function getTrends(days = 7) {
-  const res = await apiCall(`${API_BASE}/complaints/admin/trends?days=${days}`);
+
+// ============================================
+// ADMIN LOGS
+// ============================================
+
+export async function getAllLogs() {
+  const res = await apiCall(`${API_BASE}/admin/logs`);
   return handleResponse(res);
 }
 
-// ✅ UPDATE THE DEFAULT EXPORT
+export async function logout() {
+  logoutAdmin();
+}
+
+// ============================================
+// DEFAULT EXPORT
+// ============================================
+
 const api = {
+  // Complaints
   getAllComplaints,
   getUnreadComplaints,
   getStats,
@@ -313,14 +353,26 @@ const api = {
   updateComplaintStatus,
   updateComplaint,
   markComplaintAsRead,
+  getTrends,
+  
+  // Departments
+  getDepartments,
+  getDepartmentById,
+  createDepartment,
+  updateDepartment,
+  deleteDepartment,
+  
+  // Profile
   getProfile,
   updateProfile,
   changePassword,
-  getDepartments,
+  
+  // Students
+  searchStudent,
+  resetStudent,
+  
+  // Logs
   getAllLogs,
-  searchStudent,    // ✅ ADD
-  resetStudent,     // ✅ ADD
-   getTrends, // ✅ ADD THIS
   logout,
 };
 
