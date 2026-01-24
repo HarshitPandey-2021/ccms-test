@@ -2,82 +2,52 @@
 
 > Report it. Track it. Fix it. 🚀
 
-Modern web application for managing campus facility complaints with real-time tracking, analytics, and automated workflows.
+Modern web application for managing campus facility complaints with automated department routing, staff assignment, email notifications, and comprehensive analytics.
 
-**Status:** 🟢 Admin Panel Live | 🟡 Backend & Student Portal In Progress
-
----
-
-## 🌐 Live Demos
-
-- **Admin Dashboard:** [Check it here](https://notwhite.netlify.app/) ✅
-- Student Portal: Coming Soon
-- API Docs: Coming Soon
+**Status:** 🟢 Test Environment Live | 🟡 Production Migration In Progress
 
 ---
 
-## 👥 Team
+## 🌐 Live Environments
 
-| Member | Module | Status |
-|--------|--------|--------|
-| **Harshit** | [Admin Panel →](./admin/) | ✅ Complete & Deployed |
-| **Shakti** | Student UI | 🚧 In Progress |
-| **Somesh** | Backend API | 🚧 In Progress |
-| **Shiva** | Database & Testing | 🚧 In Progress |
+### Test Environment (Enhanced Version)
+- **Landing Page:** [https://landing-test-liard-one.vercel.app](https://landing-test-liard-one.vercel.app) ✅
+- **Admin Dashboard:** [https://admin-test-nine.vercel.app](https://admin-test-nine.vercel.app) ✅
+- **Student Portal:** [https://user-dash-test.vercel.app](https://user-dash-test.vercel.app) ✅
+- **Backend API:** [https://ccms-backend-test.onrender.com](https://ccms-backend-test.onrender.com) ✅
 
----
-
-## 📦 Project Modules
-
-### [🎛️ Admin Panel](./admin/) - ✅ Production Ready
-Full-featured admin dashboard with dark mode, analytics, and export capabilities.
-
-**Features:** Real-time stats · Complaint management · Interactive charts · CSV export · Print reports · Fully responsive
-
-**Tech:** React 18 + Vite + Tailwind CSS + Recharts
-
-**[📖 Full Documentation](./admin/README.md)** | **[🚀 Live Demo](https://notwhite.netlify.app/)**
+### Production Environment (Stable)
+- **Landing Page:** [https://ccms-home.vercel.app](https://ccms-home.vercel.app)
+- **Admin Dashboard:** [https://ccms-admin-rho.vercel.app](https://ccms-admin-rho.vercel.app)
+- **Student Portal:** [https://ccms-student.vercel.app](https://ccms-student.vercel.app)
+- **Backend API:** [https://campus-backend-rq7f.onrender.com](https://campus-backend-rq7f.onrender.com)
 
 ---
 
-### 📱 Student Portal - 🚧 In Progress
-Complaint submission and tracking interface for students.
+## ✨ Key Features
 
-**Planned Features:** Submit complaints · Upload images · Track status · View history
+### Student Portal
+- 🔐 **Secure Registration** - Email OTP verification via SendGrid
+- 📝 **Complaint Submission** - File complaints with category selection and image upload
+- 🔍 **Real-time Tracking** - Track complaint status and view history
+- 🎭 **Anonymous Option** - Optional anonymity for sensitive complaints
+- ⭐ **Feedback System** - Rate and review after resolution
 
----
+### Admin Dashboard
+- 📊 **Interactive Analytics** - Real-time statistics and trend charts
+- 🏢 **Department Management** - Create and manage departments with categories
+- 👥 **Staff Management** - Assign staff to departments with role-based access
+- ✅ **Complaint Assignment** - Assign complaints to specific staff members
+- 🔔 **Email Notifications** - Automated emails on status changes
+- 🌓 **Dark Mode** - Full dark theme support
+- 📱 **Fully Responsive** - Works on all devices
 
-### ⚙️ Backend API - 🚧 In Progress
-RESTful API with authentication and database integration.
-
-**Required Endpoints:** Auth · Complaints CRUD · Statistics · File uploads
-
-**[API Spec →](./admin/README.md#backend-integration)**
-
----
-
-### 💾 Database - 🚧 In Progress
-PostgreSQL/MongoDB with complaint tracking and user management.
-
-**Schema:** Users (admins, students) · Complaints · Categories · Activity logs
-
----
-
-## 🚀 Quick Start
-
-```bash
-# Clone the repo
-git clone <https://github.com/HarshitPandey-2021/Campus-Complaint-Management-System>
-cd Campus-Complaint-Management-System
-
-# For Admin Panel (already working!)
-cd admin
-npm install
-npm run dev
-# Opens at http://localhost:5173
-
-# For other modules - wait for your teammates! 😄
-```
+### Smart Features
+- 🎯 **Auto-routing** - Complaints automatically assigned to departments based on category
+- 🔒 **Role-based Access** - Different admin types (Regular, Women's Cell, Anti-Ragging, Dean)
+- 📧 **SendGrid Integration** - OTP verification and notification emails
+- 🔐 **JWT Authentication** - Secure token-based authentication
+- 📷 **Cloudinary Integration** - Image upload and management
 
 ---
 
@@ -85,166 +55,324 @@ npm run dev
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend (Admin) | React 18, Vite, Tailwind CSS |
-| Frontend (Student) | React |
-| Backend | Node.js, Express (planned) |
-| Database | MongoDB (planned) |
-| Deployment | Netlify (Frontend), TBD (Backend) |
+| Frontend | React 18, Vite, TailwindCSS |
+| Backend | Node.js, Express |
+| Database | MongoDB Atlas |
+| Authentication | JWT, bcrypt, OTP (SendGrid) |
+| File Storage | Cloudinary |
+| Deployment | Vercel (Frontend), Render (Backend) |
+| Email Service | SendGrid |
 
 ---
 
-## 🌳 Git Workflow
+## 📦 Project Structure
 
-**Branches:**
-- `main` → Production code (protected 🔒)
-- `develop` → Integration & testing (default branch)
-- `feature/*` → Your work here!
+```
+CCMS-PROJECT/
+│
+├── 📂 frontend/student-ui/     ✅ Landing & Registration
+│   ├── Login with email
+│   ├── OTP verification
+│   └── Responsive design
+│
+├── 📂 admin/                   ✅ Admin Dashboard
+│   ├── Dashboard & Analytics
+│   ├── Department Management
+│   ├── Staff Management
+│   ├── Complaint Assignment
+│   └── Dark mode support
+│
+├── 📂 user-portal/             ✅ Student Dashboard
+│   ├── File complaints
+│   ├── Track status
+│   ├── Anonymous option
+│   └── Feedback system
+│
+└── 📂 backend/                 ✅ RESTful API
+    ├── Authentication (JWT + OTP)
+    ├── Complaints CRUD
+    ├── Departments & Staff
+    ├── Email notifications
+    └── File uploads
+```
 
-**Daily Flow:**
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Node.js 18+
+- MongoDB Atlas account
+- SendGrid API key (for emails)
+- Cloudinary account (for images)
+
+### Installation
+
 ```bash
-# Start fresh
-git checkout develop
-git pull origin develop
+# Clone the repository
+git clone <repository-url>
+cd CCMS-PROJECT
 
-# Create your branch
-git checkout -b feature/your-feature-name
+# Backend Setup
+cd backend
+npm install
+cp .env.example .env
+# Configure environment variables
+npm run dev
 
-# Work, commit, push
-git add .
-git commit -m "feat: what you did"
-git push origin feature/your-feature-name
+# Admin Dashboard
+cd ../admin
+npm install
+npm run dev
 
-# Create PR on GitHub → Request review → Merge after approval
+# Student Portal
+cd ../user-portal
+npm install
+npm run dev
+
+# Landing Page
+cd ../frontend/student-ui
+npm install
+npm run dev
 ```
 
-**Commit Format:**
-- `feat:` New feature
-- `fix:` Bug fix
-- `docs:` Documentation
-- `style:` UI/formatting
+### Environment Variables
+
+**Backend (.env)**
+```env
+MONGODB_URI=mongodb+srv://...
+DB_NAME=ccms
+JWT_SECRET=your_secret_key
+SENDGRID_API_KEY=SG.xxx...
+SENDGRID_FROM_EMAIL=noreply@yourdomain.com
+CLOUDINARY_CLOUD_NAME=xxx
+CLOUDINARY_API_KEY=xxx
+CLOUDINARY_API_SECRET=xxx
+PORT=5000
+```
+
+**Frontend (.env)**
+```env
+VITE_API_URL=http://localhost:5000/api
+```
 
 ---
 
-## 🔌 Integration Guide
+## 📡 API Endpoints
 
-### Backend Team: Required API Endpoints
-
+### Authentication
 ```http
-POST   /api/auth/login              # Admin/student login
-GET    /api/complaints               # Get all complaints
-POST   /api/complaints               # Submit new complaint
-GET    /api/complaints/:id           # Get single complaint
-PATCH  /api/complaints/:id/status    # Update status
-GET    /api/complaints/stats         # Get statistics
-GET    /api/complaints/analytics     # Get chart data
+POST   /api/register          # Register with OTP
+POST   /api/verify-otp        # Verify OTP
+POST   /api/login             # Login
+GET    /api/profile           # Get user profile
+PUT    /api/profile           # Update profile
 ```
 
-**Full spec with data formats:** [admin/README.md](./admin/README.md#backend-integration)
-
----
-
-### Database Team: Required Schema
-
-```sql
--- Users table
-id, name, email, password_hash, role, department, created_at
-
--- Complaints table
-id, subject, description, category, location, status, priority,
-submitted_by, email, submitted_at, admin_remarks, assigned_to, 
-image_url, updated_at
+### Complaints
+```http
+GET    /api/complaints              # Get all complaints
+GET    /api/complaints/:id          # Get single complaint
+POST   /api/complaints              # Create complaint
+PUT    /api/complaints/:id          # Update complaint
+PUT    /api/complaints/:id/assign   # Assign to staff
+DELETE /api/complaints/:id          # Delete complaint
+POST   /api/complaints/:id/feedback # Submit feedback
 ```
 
-**Status:** `Pending`, `In Progress`, `Resolved`, `Rejected`  
-**Categories:** `Fan`, `Light`, `Cleanliness`, `Projector`, `Infrastructure`, `Plumbing`, `Network`
+### Departments & Staff
+```http
+GET    /api/departments                    # Get all departments
+POST   /api/departments                    # Create department
+PUT    /api/departments/:id                # Update department
+DELETE /api/departments/:id                # Delete department
 
----
-
-## 📁 Project Structure
-
-```
-Campus-Complaint-Management-System/
-├── admin/              ✅ Admin dashboard (React)
-│   ├── README.md       → Complete setup & integration guide
-│   ├── src/            → All React components
-│   └── docs/           → Screenshots & documentation
-│   └── ...
-|  
-├── frontend/           🚧 Landing Page (React)
-│
-├── backend/            🚧 API server (Node.js/Express)
-│
-├── docs/               📚 Shared documentation
-│
-└── README.md           ← You are here!
+GET    /api/staff                          # Get all staff
+GET    /api/staff/department/:deptId       # Get staff by department
+POST   /api/staff                          # Create staff
+PUT    /api/staff/:id                      # Update staff
+DELETE /api/staff/:id                      # Delete staff
 ```
 
 ---
 
-## 🎯 Current Sprint
+## 🗄️ Database Schema
 
-- [x] Admin Panel - Dashboard, analytics, dark mode
-- [x] Admin Panel - Deployed to Netlify
-- [ ] Backend API - Authentication & complaint endpoints
-- [ ] Student Portal - Complaint submission UI
-- [ ] Database - Setup & migrations
-- [ ] Integration - Connect all modules
+### Users Collection
+```javascript
+{
+  name: String,
+  email: String,
+  password: String,        // Hashed
+  rollNo: String,          // For students
+  role: "user" | "admin",
+  adminType: String,       // regular | women_cell | anti_ragging | dean
+  department: ObjectId,    // Reference
+  isVerified: Boolean,
+  createdAt: Date
+}
+```
+
+### Complaints Collection
+```javascript
+{
+  userId: ObjectId,
+  title: String,
+  description: String,
+  category: String,
+  images: [String],
+  
+  type: "general" | "sensitive" | "confidential",
+  department: ObjectId,
+  assignedTo: ObjectId,    // Staff
+  assignedBy: ObjectId,    // Admin
+  priority: "low" | "medium" | "high" | "urgent",
+  isAnonymous: Boolean,
+  
+  status: "pending" | "assigned" | "in_progress" | "resolved",
+  
+  resolution: {
+    remarks: String,
+    resolvedAt: Date,
+    resolvedBy: ObjectId
+  },
+  
+  feedback: {
+    rating: Number,
+    comment: String,
+    givenAt: Date
+  },
+  
+  createdAt: Date
+}
+```
+
+### Departments Collection
+```javascript
+{
+  name: String,
+  description: String,
+  categories: [String],
+  headName: String,
+  headEmail: String,
+  headPhone: String,
+  isActive: Boolean,
+  createdAt: Date
+}
+```
+
+### Staff Collection
+```javascript
+{
+  name: String,
+  email: String,
+  phone: String,
+  role: "Worker" | "Supervisor",
+  department: ObjectId,
+  isActive: Boolean,
+  createdAt: Date
+}
+```
 
 ---
 
-## 🛡️ Rules (Keep It Clean!)
+## 🎯 Complaint Flow
 
-| ✅ DO | ❌ DON'T |
-|-------|----------|
-| Create feature branches | Push to `develop` or `main` directly |
-| Request PR reviews (min 1 approval) | Merge your own PR without review |
-| Write clear commit messages | Use vague messages like "fix" or "update" |
-| Pull before starting work | Work on outdated code |
-| Test locally before pushing | Push broken code |
-| Keep `.env` files local | Commit secrets or `node_modules/` |
+```
+Student Files Complaint
+    ↓
+Auto-assigned to Department (based on category)
+    ↓
+Admin Assigns to Staff Member
+    ↓
+Staff Works on Resolution
+    ↓
+Admin Updates Status → Student Receives Email
+    ↓
+Complaint Resolved
+    ↓
+Student Gives Feedback (rating + comment)
+```
 
 ---
 
-## 📸 Preview
+## 🔐 Admin Roles & Access Control
 
-<img width="1920" height="975" alt="dashboard-light" src="https://github.com/user-attachments/assets/231136da-8ce3-463c-85b7-f0368efb9719" />
+| Role | Can See | Permissions |
+|------|---------|-------------|
+| Regular Admin | General complaints | Assign, Update, Resolve |
+| Women's Cell | Harassment, Safety complaints | View, Update, Resolve |
+| Anti-Ragging | Ragging complaints | View, Update, Resolve |
+| Dean/Super Admin | All complaints | Full access |
 
-**More screenshots:** [admin/docs/screenshots/](./admin/docs/screenshots/)
+---
+
+## 📧 Email Notifications
+
+- ✅ OTP verification on registration
+- ✅ Complaint filed confirmation
+- ✅ Status change notifications
+- ✅ Assignment notifications to staff
+- ✅ Resolution confirmation
+- ⏳ Weekly summary (planned)
+
+---
+
+## 🌐 Deployment
+
+### Frontend (Vercel)
+```bash
+# Deploy to Vercel
+vercel --prod
+```
+
+### Backend (Render)
+```bash
+# Connect GitHub repo to Render
+# Set environment variables in Render dashboard
+# Auto-deploys on git push
+```
+
+---
+
+## 🔜 Coming Soon
+
+- [ ] Student feedback dashboard
+- [ ] Advanced analytics with charts
+- [ ] AI-powered categorization
+- [ ] Duplicate complaint detection
+- [ ] Mobile app (React Native)
+- [ ] Multi-language support
+- [ ] Real-time notifications (WebSocket)
 
 ---
 
 ## 🤝 Contributing
 
-1. Pick a task from issues/project board
-2. Create feature branch: `git checkout -b feature/task-name`
-3. Code & test locally
-4. Commit with clear message: `git commit -m "feat: add login validation"`
-5. Push: `git push origin feature/task-name`
-6. Create PR on GitHub
-7. Request review from teammate
-8. Merge after approval ✅
-
----
-
-## 📞 Need Help?
-
-- **Admin Panel Issues:** Contact Harshit or check [admin/README.md](./admin/README.md)
-- **Git Problems:** Ask in group chat
-- **API Questions:** Wait for backend docs
+1. Fork the repository
+2. Create feature branch: `git checkout -b feature/amazing-feature`
+3. Commit changes: `git commit -m 'feat: add amazing feature'`
+4. Push to branch: `git push origin feature/amazing-feature`
+5. Open Pull Request
 
 ---
 
 ## 📝 License
 
-Academic Project - Built by Team CCMS
+Academic Project - Built with ❤️ by Team CCMS
 
 ---
 
+## 📞 Support
 
-**Last Updated:**  24th October 2025 | **Default Branch:** `develop`
+For issues and questions:
+- Create an issue on GitHub
+- Contact: pandey6051172@gmail.com
 
 ---
 
-> 💡 **Tip:** Always pull from `develop` before creating a new feature branch!
+**Last Updated:** 24 January 2026 | **Version:** 2.0 (Enhanced)
 
+---
 
+> 💡 **Note:** Test environment includes all latest features. Production migration in progress.
