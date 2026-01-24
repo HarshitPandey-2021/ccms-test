@@ -1314,11 +1314,19 @@ app.post("/api/auth/login", async (req, res) => {
       });
     }
 
+    // ✅ NEW: Enhanced payload with admin metadata
     const payload = {
       userId: user._id.toString(),
       email: user.email,
       role: normalizedUserRole,
     };
+
+    // ✅ NEW: Add admin-specific data if user is admin
+    if (normalizedUserRole === "admin") {
+      payload.adminType = user.adminType || "super"; // Default to super if not set
+      payload.department = user.department || null;
+      payload.permissions = user.permissions || [];
+    }
 
     const accessToken = jwt.sign(payload, process.env.JWT_SECRET, {
       expiresIn: process.env.JWT_EXPIRES_IN || "24h",
@@ -1332,13 +1340,26 @@ app.post("/api/auth/login", async (req, res) => {
 
     const { password: _, ...safeUser } = user;
 
+    // ✅ NEW: Enhanced response with admin metadata
+    const responseUser = {
+      ...safeUser,
+      role: normalizedUserRole,
+      id: user._id.toString(),
+      _id: user._id.toString(),
+    };
+
+    // Add admin-specific fields to response
+    if (normalizedUserRole === "admin") {
+      responseUser.adminType = user.adminType || "super";
+      responseUser.department = user.department || null;
+      responseUser.departmentName = user.departmentName || null;
+      responseUser.permissions = user.permissions || [];
+      
+      console.log(`✅ Admin login: ${user.email} (Type: ${responseUser.adminType})`);
+    }
+
     res.status(200).json({
-      user: {
-        ...safeUser,
-        role: normalizedUserRole,
-        id: user._id.toString(),
-        _id: user._id.toString(),
-      },
+      user: responseUser,
       token: accessToken,
       refreshToken: refreshToken || accessToken,
       role: normalizedUserRole,
@@ -2029,7 +2050,79 @@ app.get(
   requireRole("admin"),
   async (req, res) => {
     try {
-      const complaints = await Complaints.find({})
+      // ✅ Get current admin's details
+      const currentAdmin = await Users.findOne({ _id: toObjectId(req.user.userId) });
+      
+      if (!currentAdmin) {
+        return res.status(404).json({ message: "Admin not found" });
+      }
+
+      const adminType = currentAdmin.adminType || "super";
+      
+      console.log(`📋 Admin Type: ${adminType} (${currentAdmin.email})`);
+
+      // ✅ Build query based on admin type
+      let query = {};
+
+      if (adminType === "super") {
+        // Super Admin sees EVERYTHING
+        console.log("✅ Super Admin: Showing ALL complaints");
+        query = {};
+      } 
+      else if (adminType === "department") {
+        // Department Admin sees ONLY their department
+        if (currentAdmin.department) {
+          query.department = currentAdmin.department;
+          console.log(`✅ Department Admin: Filtering for ${currentAdmin.departmentName}`);
+        } else {
+          // If no department assigned, show nothing
+          console.log("⚠️ Department Admin has no department assigned");
+          query._id = { $exists: false }; // Returns empty
+        }
+      }
+      else if (adminType === "womens_cell") {
+        // Women's Cell sees ONLY sensitive/harassment complaints
+        query.$or = [
+          { category: { $regex: /harassment/i } },
+          { category: { $regex: /eve teasing/i } },
+          { category: { $regex: /safety/i } },
+          { category: { $regex: /women/i } },
+          { category: { $regex: /ragging/i } },
+          { type: "confidential" },
+          { type: "sensitive" },
+        ];
+        console.log("✅ Women's Cell: Filtering sensitive complaints");
+      }
+      else if (adminType === "academic") {
+        // Academic Admin sees ONLY academic complaints
+        query.$or = [
+          { category: { $regex: /academic/i } },
+          { category: { $regex: /exam/i } },
+          { category: { $regex: /faculty/i } },
+          { category: { $regex: /teacher/i } },
+          { category: { $regex: /syllabus/i } },
+          { departmentName: { $regex: /academic/i } },
+        ];
+        console.log("✅ Academic Admin: Filtering academic complaints");
+      }
+      else if (adminType === "anti_ragging") {
+        // Anti-Ragging sees ONLY ragging/bullying complaints
+        query.$or = [
+          { category: { $regex: /ragging/i } },
+          { category: { $regex: /bullying/i } },
+          { category: { $regex: /harassment/i } },
+          { category: { $regex: /discipline/i } },
+        ];
+        console.log("✅ Anti-Ragging Admin: Filtering ragging complaints");
+      }
+      else {
+        // Unknown admin type - show nothing for security
+        console.log(`⚠️ Unknown admin type: ${adminType}`);
+        query._id = { $exists: false };
+      }
+
+      // Fetch complaints with the built query
+      const complaints = await Complaints.find(query)
         .sort({ submittedAt: -1 })
         .toArray();
 
@@ -2039,10 +2132,11 @@ app.get(
         createdAt: c.createdAt || c.submittedAt,
       }));
 
-      console.log(`✅ Returning ${transformed.length} complaints to admin`);
+      console.log(`✅ Returning ${transformed.length} complaints for ${adminType} admin (${currentAdmin.email})`);
+      
       res.json(transformed);
     } catch (err) {
-      console.error("Error fetching all complaints:", err);
+      console.error("❌ Error fetching complaints:", err);
       res.status(500).json({ message: "Internal server error" });
     }
   }
@@ -2150,15 +2244,81 @@ app.get(
   requireRole("admin"),
   async (req, res) => {
     try {
-      let unread = await Complaints.find({
+      // ✅ Get current admin's details
+      const currentAdmin = await Users.findOne({ _id: toObjectId(req.user.userId) });
+      const adminType = currentAdmin?.adminType || "super";
+
+      // ✅ Build query
+      let baseQuery = {
         $or: [{ readByAdmin: { $exists: false } }, { readByAdmin: false }],
-      })
+      };
+
+      // Add role-based filtering
+      if (adminType === "department" && currentAdmin.department) {
+        baseQuery.department = currentAdmin.department;
+      } else if (adminType === "womens_cell") {
+        baseQuery.$and = [
+          { $or: baseQuery.$or },
+          {
+            $or: [
+              { category: { $regex: /harassment/i } },
+              { category: { $regex: /safety/i } },
+              { type: "confidential" },
+            ],
+          },
+        ];
+        delete baseQuery.$or;
+      } else if (adminType === "academic") {
+        baseQuery.$and = [
+          { $or: baseQuery.$or },
+          {
+            $or: [
+              { category: { $regex: /academic/i } },
+              { category: { $regex: /exam/i } },
+            ],
+          },
+        ];
+        delete baseQuery.$or;
+      } else if (adminType === "anti_ragging") {
+        baseQuery.$and = [
+          { $or: baseQuery.$or },
+          {
+            $or: [
+              { category: { $regex: /ragging/i } },
+              { category: { $regex: /bullying/i } },
+            ],
+          },
+        ];
+        delete baseQuery.$or;
+      }
+
+      let unread = await Complaints.find(baseQuery)
         .sort({ submittedAt: -1 })
         .limit(10)
         .toArray();
 
       if (!unread || unread.length === 0) {
-        unread = await Complaints.find()
+        // If no unread, get recent ones
+        let recentQuery = {};
+        if (adminType === "department" && currentAdmin.department) {
+          recentQuery.department = currentAdmin.department;
+        } else if (adminType === "womens_cell") {
+          recentQuery.$or = [
+            { category: { $regex: /harassment/i } },
+            { type: "confidential" },
+          ];
+        } else if (adminType === "academic") {
+          recentQuery.$or = [
+            { category: { $regex: /academic/i } },
+            { category: { $regex: /exam/i } },
+          ];
+        } else if (adminType === "anti_ragging") {
+          recentQuery.$or = [
+            { category: { $regex: /ragging/i } },
+          ];
+        }
+
+        unread = await Complaints.find(recentQuery)
           .sort({ submittedAt: -1 })
           .limit(10)
           .toArray();
@@ -2177,7 +2337,6 @@ app.get(
     }
   }
 );
-
 app.patch(
   "/api/complaints/admin/:id/read",
   auth,
@@ -2226,15 +2385,47 @@ app.get(
   requireRole("admin"),
   async (req, res) => {
     try {
-      const total = await Complaints.countDocuments();
-      const pending = await Complaints.countDocuments({ status: "Pending" });
-      const inProgress = await Complaints.countDocuments({
-        status: "In Progress",
-      });
-      const resolved = await Complaints.countDocuments({ status: "Resolved" });
-      const rejected = await Complaints.countDocuments({ status: "Rejected" });
+      // ✅ Get current admin's details
+      const currentAdmin = await Users.findOne({ _id: toObjectId(req.user.userId) });
+      const adminType = currentAdmin?.adminType || "super";
+
+      // ✅ Build same query as complaint list
+      let query = {};
+
+      if (adminType === "department" && currentAdmin.department) {
+        query.department = currentAdmin.department;
+      } else if (adminType === "womens_cell") {
+        query.$or = [
+          { category: { $regex: /harassment/i } },
+          { category: { $regex: /eve teasing/i } },
+          { category: { $regex: /safety/i } },
+          { category: { $regex: /women/i } },
+          { type: "confidential" },
+          { type: "sensitive" },
+        ];
+      } else if (adminType === "academic") {
+        query.$or = [
+          { category: { $regex: /academic/i } },
+          { category: { $regex: /exam/i } },
+          { category: { $regex: /faculty/i } },
+        ];
+      } else if (adminType === "anti_ragging") {
+        query.$or = [
+          { category: { $regex: /ragging/i } },
+          { category: { $regex: /bullying/i } },
+        ];
+      }
+
+      // Get stats with filtered query
+      const total = await Complaints.countDocuments(query);
+      const pending = await Complaints.countDocuments({ ...query, status: "Pending" });
+      const inProgress = await Complaints.countDocuments({ ...query, status: "In Progress" });
+      const assigned = await Complaints.countDocuments({ ...query, status: "Assigned" });
+      const resolved = await Complaints.countDocuments({ ...query, status: "Resolved" });
+      const rejected = await Complaints.countDocuments({ ...query, status: "Rejected" });
 
       const categoryStats = await Complaints.aggregate([
+        { $match: query },
         {
           $group: {
             _id: "$category",
@@ -2244,6 +2435,7 @@ app.get(
       ]).toArray();
 
       const priorityStats = await Complaints.aggregate([
+        { $match: query },
         {
           $group: {
             _id: { $ifNull: ["$priority", "UNKNOWN"] },
@@ -2261,6 +2453,7 @@ app.get(
       const resolutionAgg = await Complaints.aggregate([
         {
           $match: {
+            ...query,
             status: "Resolved",
             resolvedAt: { $ne: null },
             submittedAt: { $ne: null },
@@ -2292,6 +2485,7 @@ app.get(
           total,
           pending,
           inProgress,
+          assigned,
           resolved,
           rejected,
         },
@@ -3606,6 +3800,324 @@ app.get("/api/complaints/admin/assignment-stats", auth, requireRole("admin"), as
     res.status(500).json({ message: "Failed to fetch stats" });
   }
 });
+
+
+
+// ============================================
+// ADMIN MANAGEMENT ENDPOINTS
+// ============================================
+
+// Helper: Check if user is super admin
+function requireSuperAdmin(req, res, next) {
+  if (!req.user || req.user.role !== "admin") {
+    return res.status(403).json({ message: "Admin access required" });
+  }
+  
+  // If adminType exists in token, check it
+  if (req.user.adminType && req.user.adminType !== "super") {
+    return res.status(403).json({ message: "Super Admin access required" });
+  }
+  
+  // For backwards compatibility, also check user in database
+  Users.findOne({ _id: toObjectId(req.user.userId) })
+    .then(user => {
+      if (user && user.adminType && user.adminType !== "super") {
+        return res.status(403).json({ message: "Super Admin access required" });
+      }
+      next();
+    })
+    .catch(() => {
+      res.status(500).json({ message: "Authorization check failed" });
+    });
+}
+
+// GET: List all admins (Super Admin only)
+app.get("/api/admin/list", auth, requireSuperAdmin, async (req, res) => {
+  try {
+    const admins = await Users.find({ role: "admin" })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    // Remove passwords
+    const safeAdmins = admins.map(({ password, ...admin }) => ({
+      ...admin,
+      adminType: admin.adminType || "super",
+      departmentName: admin.departmentName || null,
+    }));
+
+    res.json({
+      success: true,
+      count: safeAdmins.length,
+      data: safeAdmins,
+    });
+  } catch (error) {
+    console.error("Error fetching admins:", error);
+    res.status(500).json({ message: "Failed to fetch admins" });
+  }
+});
+
+// POST: Create new admin (Super Admin only)
+app.post("/api/admin/create", auth, requireSuperAdmin, async (req, res) => {
+  try {
+    const { name, email, password, adminType, department, permissions } = req.body;
+
+    // Validation
+    if (!name || !email || !password || !adminType) {
+      return res.status(400).json({ 
+        message: "Name, email, password, and admin type are required" 
+      });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ 
+        message: "Password must be at least 6 characters" 
+      });
+    }
+
+    // Validate admin type
+    const validAdminTypes = ['super', 'department', 'womens_cell', 'academic', 'anti_ragging'];
+    if (!validAdminTypes.includes(adminType)) {
+      return res.status(400).json({ 
+        message: `Invalid admin type. Must be one of: ${validAdminTypes.join(', ')}` 
+      });
+    }
+
+    // Department admins must have a department
+    if (adminType === 'department' && !department) {
+      return res.status(400).json({ 
+        message: "Department is required for department admins" 
+      });
+    }
+
+    // Check if email already exists
+    const existing = await Users.findOne({ email: email.toLowerCase().trim() });
+    if (existing) {
+      return res.status(400).json({ message: "Email already registered" });
+    }
+
+    // Get department name if department admin
+    let departmentName = null;
+    if (adminType === 'department' && department) {
+      if (!ObjectId.isValid(department)) {
+        return res.status(400).json({ message: "Invalid department ID" });
+      }
+      
+      const dept = await Departments.findOne({ _id: toObjectId(department) });
+      if (!dept) {
+        return res.status(400).json({ message: "Department not found" });
+      }
+      departmentName = dept.name;
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create admin
+    const now = new Date();
+    const newAdmin = {
+      name: name.trim(),
+      email: email.toLowerCase().trim(),
+      password: hashedPassword,
+      role: "admin",
+      adminType: adminType,
+      department: adminType === 'department' && department ? toObjectId(department) : null,
+      departmentName: departmentName,
+      permissions: permissions || [],
+      emailVerified: true,
+      createdAt: now,
+      updatedAt: now,
+      createdBy: req.user.userId,
+    };
+
+    const result = await Users.insertOne(newAdmin);
+
+    // Log action
+    await AdminLogs.insertOne({
+      adminId: req.user.userId,
+      action: "CREATE_ADMIN",
+      details: { 
+        newAdminId: result.insertedId, 
+        email: newAdmin.email,
+        adminType: adminType,
+        department: departmentName 
+      },
+      timestamp: now,
+    });
+
+    const { password: _, ...safeAdmin } = newAdmin;
+
+    res.status(201).json({
+      success: true,
+      message: "Admin created successfully",
+      data: { ...safeAdmin, _id: result.insertedId },
+    });
+  } catch (error) {
+    console.error("Error creating admin:", error);
+    res.status(500).json({ message: "Failed to create admin" });
+  }
+});
+
+// PUT: Update admin (Super Admin only)
+app.put("/api/admin/:id", auth, requireSuperAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, email, adminType, department, permissions, isActive } = req.body;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid admin ID" });
+    }
+
+    const existing = await Users.findOne({ _id: toObjectId(id) });
+    if (!existing || existing.role !== "admin") {
+      return res.status(404).json({ message: "Admin not found" });
+    }
+
+    // Prevent super admin from changing their own type
+    if (id === req.user.userId && adminType && adminType !== 'super') {
+      return res.status(400).json({ 
+        message: "You cannot change your own admin type" 
+      });
+    }
+
+    const updateFields = { updatedAt: new Date() };
+
+    if (name !== undefined) updateFields.name = name.trim();
+    if (email !== undefined) {
+      // Check email conflict
+      const emailConflict = await Users.findOne({
+        _id: { $ne: toObjectId(id) },
+        email: email.toLowerCase().trim(),
+      });
+      if (emailConflict) {
+        return res.status(400).json({ message: "Email already in use" });
+      }
+      updateFields.email = email.toLowerCase().trim();
+    }
+    if (adminType !== undefined) updateFields.adminType = adminType;
+    if (permissions !== undefined) updateFields.permissions = permissions;
+    if (isActive !== undefined) updateFields.isActive = isActive;
+
+    // Handle department
+    if (department !== undefined) {
+      if (department && ObjectId.isValid(department)) {
+        const dept = await Departments.findOne({ _id: toObjectId(department) });
+        if (dept) {
+          updateFields.department = toObjectId(department);
+          updateFields.departmentName = dept.name;
+        }
+      } else {
+        updateFields.department = null;
+        updateFields.departmentName = null;
+      }
+    }
+
+    await Users.updateOne(
+      { _id: toObjectId(id) },
+      { $set: updateFields }
+    );
+
+    await AdminLogs.insertOne({
+      adminId: req.user.userId,
+      action: "UPDATE_ADMIN",
+      details: { adminId: id, updates: updateFields },
+      timestamp: new Date(),
+    });
+
+    const updated = await Users.findOne({ _id: toObjectId(id) });
+    const { password: _, ...safeAdmin } = updated;
+
+    res.json({
+      success: true,
+      message: "Admin updated successfully",
+      data: safeAdmin,
+    });
+  } catch (error) {
+    console.error("Error updating admin:", error);
+    res.status(500).json({ message: "Failed to update admin" });
+  }
+});
+
+// DELETE: Delete admin (Super Admin only)
+app.delete("/api/admin/:id", auth, requireSuperAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid admin ID" });
+    }
+
+    // Prevent self-deletion
+    if (id === req.user.userId) {
+      return res.status(400).json({ 
+        message: "You cannot delete your own account" 
+      });
+    }
+
+    const existing = await Users.findOne({ _id: toObjectId(id) });
+    if (!existing || existing.role !== "admin") {
+      return res.status(404).json({ message: "Admin not found" });
+    }
+
+    // Soft delete
+    await Users.updateOne(
+      { _id: toObjectId(id) },
+      { $set: { isActive: false, updatedAt: new Date() } }
+    );
+
+    await AdminLogs.insertOne({
+      adminId: req.user.userId,
+      action: "DELETE_ADMIN",
+      details: { deletedAdminId: id, email: existing.email },
+      timestamp: new Date(),
+    });
+
+    res.json({
+      success: true,
+      message: "Admin deleted successfully",
+    });
+  } catch (error) {
+    console.error("Error deleting admin:", error);
+    res.status(500).json({ message: "Failed to delete admin" });
+  }
+});
+
+// GET: Admin stats (for dashboard)
+app.get("/api/admin/stats", auth, requireSuperAdmin, async (req, res) => {
+  try {
+    const total = await Users.countDocuments({ role: "admin", isActive: { $ne: false } });
+    const superAdmins = await Users.countDocuments({ role: "admin", adminType: "super", isActive: { $ne: false } });
+    const deptAdmins = await Users.countDocuments({ role: "admin", adminType: "department", isActive: { $ne: false } });
+    const womensCell = await Users.countDocuments({ role: "admin", adminType: "womens_cell", isActive: { $ne: false } });
+
+    const byType = await Users.aggregate([
+      { $match: { role: "admin", isActive: { $ne: false } } },
+      { $group: { _id: "$adminType", count: { $sum: 1 } } },
+    ]).toArray();
+
+    res.json({
+      success: true,
+      data: {
+        total,
+        superAdmins,
+        deptAdmins,
+        womensCell,
+        byType,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching admin stats:", error);
+    res.status(500).json({ message: "Failed to fetch stats" });
+  }
+});
+
+
+
+
+
+
+
+
+
 // ---------- 404 & ERROR HANDLERS ----------
 app.use((req, res) => {
   res.status(404).json({ message: "URL not found" });

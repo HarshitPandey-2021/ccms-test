@@ -1,8 +1,6 @@
-// admin/src/components/Sidebar.jsx
-
+// admin/src/components/Sidebar.jsx - Role-Based Navigation
 import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { RiGroupLine } from 'react-icons/ri';
 import {
   RiDashboardLine,
   RiFileListLine,
@@ -12,8 +10,9 @@ import {
   RiLogoutBoxLine,
   RiCloseLine,
   RiTeamLine,
-  RiBuildingLine, // ✅ NEW ICON
-  
+  RiBuildingLine,
+  RiAdminLine,
+  RiShieldUserLine,
 } from 'react-icons/ri';
 import { getAdminUser, logoutAdmin } from '../utils/tokenUtils';
 import { useToast } from '../hooks/useToast';
@@ -24,6 +23,9 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const { success } = useToast();
   const adminUser = getAdminUser();
+
+  // Get admin type (default to 'super' for backwards compatibility)
+  const adminType = adminUser?.adminType || 'super';
 
   useEffect(() => {
     const handleResize = () => {
@@ -61,17 +63,72 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
     }
   };
 
-  // ✅ UPDATED: Added Departments
-  const navItems = [
-    { path: '/dashboard', label: 'Dashboard', icon: RiDashboardLine },
-    { path: '/complaints', label: 'Complaints', icon: RiFileListLine },
-    { path: '/departments', label: 'Departments', icon: RiBuildingLine }, // ✅ NEW
-     { path: '/staff', label: 'Staff', icon: RiGroupLine },
-    { path: '/analytics', label: 'Analytics', icon: RiBarChartLine },
-    { path: '/students', label: 'Students', icon: RiTeamLine },
-    { path: '/activity-logs', label: 'Activity Logs', icon: RiHistoryLine },
-    { path: '/profile', label: 'Profile', icon: RiUserLine },
-  ];
+  // ✅ ROLE-BASED NAVIGATION - Different nav items for different admin types
+  const getNavItems = () => {
+    // Common items for all admins
+    const commonItems = [
+      { path: '/dashboard', label: 'Dashboard', icon: RiDashboardLine },
+      { path: '/complaints', label: 'Complaints', icon: RiFileListLine },
+      { path: '/profile', label: 'Profile', icon: RiUserLine },
+    ];
+
+    // Super Admin sees everything
+    if (adminType === 'super') {
+      return [
+        { path: '/dashboard', label: 'Dashboard', icon: RiDashboardLine },
+        { path: '/complaints', label: 'Complaints', icon: RiFileListLine },
+        { path: '/departments', label: 'Departments', icon: RiBuildingLine },
+        { path: '/staff', label: 'Staff', icon: RiTeamLine },
+        { path: '/analytics', label: 'Analytics', icon: RiBarChartLine },
+        { path: '/students', label: 'Students', icon: RiTeamLine },
+        { path: '/admin-management', label: 'Admin Management', icon: RiAdminLine }, // ✅ NEW
+        { path: '/activity-logs', label: 'Activity Logs', icon: RiHistoryLine },
+        { path: '/profile', label: 'Profile', icon: RiUserLine },
+      ];
+    }
+
+    // Department Admin - limited access
+    if (adminType === 'department') {
+      return [
+        { path: '/dashboard', label: 'Dashboard', icon: RiDashboardLine },
+        { path: '/complaints', label: 'Complaints', icon: RiFileListLine },
+        { path: '/staff', label: 'Staff', icon: RiTeamLine },
+        { path: '/analytics', label: 'Analytics', icon: RiBarChartLine },
+        { path: '/profile', label: 'Profile', icon: RiUserLine },
+      ];
+    }
+
+    // Women's Cell / Academic / Anti-Ragging - focused access
+    if (adminType === 'womens_cell' || adminType === 'academic' || adminType === 'anti_ragging') {
+      return [
+        { path: '/dashboard', label: 'Dashboard', icon: RiDashboardLine },
+        { path: '/complaints', label: 'Complaints', icon: RiFileListLine },
+        { path: '/analytics', label: 'Analytics', icon: RiBarChartLine },
+        { path: '/profile', label: 'Profile', icon: RiUserLine },
+      ];
+    }
+
+    // Default fallback
+    return commonItems;
+  };
+
+  const navItems = getNavItems();
+
+  // Get admin type badge color
+  const getAdminBadge = () => {
+    const badges = {
+      super: { label: 'Super Admin', icon: RiShieldUserLine, color: 'bg-gradient-to-r from-purple-600 to-indigo-600' },
+      department: { label: 'Department', icon: RiBuildingLine, color: 'bg-gradient-to-r from-blue-600 to-cyan-600' },
+      womens_cell: { label: "Women's Cell", icon: RiShieldUserLine, color: 'bg-gradient-to-r from-pink-600 to-rose-600' },
+      academic: { label: 'Academic', icon: RiTeamLine, color: 'bg-gradient-to-r from-green-600 to-emerald-600' },
+      anti_ragging: { label: 'Anti-Ragging', icon: RiAdminLine, color: 'bg-gradient-to-r from-orange-600 to-amber-600' },
+    };
+
+    return badges[adminType] || badges.super;
+  };
+
+  const adminBadge = getAdminBadge();
+  const BadgeIcon = adminBadge.icon;
 
   return (
     <>
@@ -106,7 +163,15 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
               <h1 className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
                 Admin Panel
               </h1>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate">
+              <div className="flex items-center gap-1.5 mt-2">
+                <div className={`p-1 rounded ${adminBadge.color}`}>
+                  <BadgeIcon className="h-3 w-3 text-white" />
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                  {adminBadge.label}
+                </p>
+              </div>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 truncate">
                 {adminUser?.name || 'Administrator'}
               </p>
             </div>
@@ -168,7 +233,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
               CCMS v1.0.0
             </p>
             <p className="text-xs text-gray-500 dark:text-gray-500 text-center mt-1">
-              Admin Portal
+              {adminBadge.label} Portal
             </p>
           </div>
         </div>

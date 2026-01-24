@@ -416,6 +416,45 @@ export async function resetStudent(rollNo) {
     body: JSON.stringify({ rollNo }),
   });
   return handleResponse(res);
+
+}
+
+
+// ============================================
+// ADMIN MANAGEMENT
+// ============================================
+
+export async function getAllAdmins() {
+  const res = await apiCall(`${API_BASE}/admin/list`);
+  return handleResponse(res);
+}
+
+export async function createAdmin(data) {
+  const res = await apiCall(`${API_BASE}/admin/create`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return handleResponse(res);
+}
+
+export async function updateAdmin(id, data) {
+  const res = await apiCall(`${API_BASE}/admin/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+  return handleResponse(res);
+}
+
+export async function deleteAdmin(id) {
+  const res = await apiCall(`${API_BASE}/admin/${id}`, {
+    method: "DELETE",
+  });
+  return handleResponse(res);
+}
+
+export async function getAdminStats() {
+  const res = await apiCall(`${API_BASE}/admin/stats`);
+  return handleResponse(res);
 }
 
 // ============================================
@@ -471,6 +510,12 @@ const api = {
   // Students
   searchStudent,
   resetStudent,
+
+    getAllAdmins,
+  createAdmin,
+  updateAdmin,
+  deleteAdmin,
+  getAdminStats,
   
   // Logs
   getAllLogs,

@@ -10,6 +10,7 @@ import useKeyboardShortcuts from "./hooks/useKeyboardShortcuts.js";
 import { ToastProvider } from "./context/ToastContext.jsx";
 import ManageStudents from "./pages/ManageStudents.jsx";
 import Departments from "./pages/Departments.jsx"; // ✅ NEW IMPORT
+import AdminManagement from "./pages/AdminManagement.jsx"; // ✅ ADD THIS
 import Staff from "./pages/Staff.jsx"; // ✅ NEW
 import {
   initializeActivityLogger,
@@ -45,7 +46,7 @@ function RouteHandler() {
   const navigate = useNavigate();
   
   useEffect(() => {
-    const validRoutes = ['/', '/dashboard', '/complaints', '/analytics', '/students', '/departments','/staff', '/activity-logs', '/profile', '/unauthorized']; // ✅ ADDED /departments
+    const validRoutes = ['/', '/dashboard', '/complaints', '/analytics', '/students', '/departments','/staff',   '/admin-management', '/activity-logs', '/profile', '/unauthorized']; // ✅ ADDED /departments
     const currentPath = window.location.pathname;
     
     if (!validRoutes.includes(currentPath)) {
@@ -205,6 +206,14 @@ function AppContent() {
   element={
     <ProtectedRoute>
       <Staff />
+    </ProtectedRoute>
+  }
+/>
+<Route
+  path="/admin-management"
+  element={
+    <ProtectedRoute>
+      <AdminManagement />
     </ProtectedRoute>
   }
 />
