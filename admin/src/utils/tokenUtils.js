@@ -1,7 +1,6 @@
 const ADMIN_TOKEN_KEY = "adminToken";
 const ADMIN_REFRESH_KEY = "adminRefreshToken";
 const ADMIN_SESSION_KEY = "ccms-admin-session";
-
 export function saveAdminSession(token, refreshToken, user) {
   if (!token || !user) return;
 
@@ -10,17 +9,23 @@ export function saveAdminSession(token, refreshToken, user) {
     localStorage.setItem(ADMIN_REFRESH_KEY, refreshToken);
   }
 
-  localStorage.setItem(
-    ADMIN_SESSION_KEY,
-    JSON.stringify({
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-    })
-  );
-}
+  // ✅ FIXED: Include adminType and all fields
+  const sessionData = {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    adminType: user.adminType || user.admin_type || "super", // ✅ ADD THIS
+    department: user.department || null,
+    departmentName: user.departmentName || null,
+    permissions: user.permissions || [],
+  };
 
+  localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(sessionData));
+  
+  // ✅ ALSO save as 'user' for compatibility
+  localStorage.setItem('user', JSON.stringify(sessionData));
+}
 export function getAdminToken() {
   return localStorage.getItem(ADMIN_TOKEN_KEY) || null;
 }
@@ -39,7 +44,6 @@ export function getAdminUser() {
 }
 
 // admin/src/utils/tokenUtils.js - REPLACE logoutAdmin function:
-
 export function logoutAdmin() {
   // Clear ALL possible storage keys
   const keysToRemove = [
@@ -61,6 +65,14 @@ export function logoutAdmin() {
   
   sessionStorage.clear();
   
-  // ✅ USE REPLACE (prevents back button)
-  window.location.replace("https://landing-test-liard-one.vercel.app/login");
+  // ✅ FIXED: Check environment
+  const isLocal = window.location.hostname === 'localhost';
+  
+  if (isLocal) {
+    // Local: go to local login
+    window.location.replace("/login");
+  } else {
+    // Production: go to production login
+    window.location.replace("https://landing-test-liard-one.vercel.app/login");
+  }
 }

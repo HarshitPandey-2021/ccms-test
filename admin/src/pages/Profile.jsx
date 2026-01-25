@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+// ✅ ADD THIS LINE
+const ADMIN_SESSION_KEY = "ccms-admin-session";
 import { useToast } from "../hooks/useToast";
 import {
   RiUserFill,
@@ -142,7 +144,6 @@ const handleConfirmLogout = () => {
 };
 
 // admin/src/pages/Profile.jsx - UPDATE handleSaveProfile function (around line 170):
-
 const handleSaveProfile = async () => {
   try {
     const token = getAdminToken();
@@ -167,19 +168,23 @@ const handleSaveProfile = async () => {
     setProfileData(updated);
     setIsEditing(false);
 
-    // ✅ UPDATE STORAGE IMMEDIATELY
+    // ✅ FIXED: Build session from profileData (not undefined currentAdmin)
     const updatedSession = {
       name: updated.name,
       email: updated.email,
-      role: updated.role,
-      id: updated.userId,
+      role: updated.role || profileData.role,
+      id: updated.userId || profileData.userId,
+      adminType: profileData.adminType || "super", // ✅ Use profileData
+      department: profileData.department,
+      departmentName: profileData.departmentName,
     };
     
-    localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(updatedSession));
-    localStorage.setItem("adminUser", JSON.stringify(updatedSession));
+    // Save to all storage keys
+    localStorage.setItem("ccms-admin-session", JSON.stringify(updatedSession));
     localStorage.setItem("user", JSON.stringify(updatedSession));
+    localStorage.setItem("adminUser", JSON.stringify(updatedSession));
 
-    // ✅ TRIGGER STORAGE EVENT (forces navbar re-render)
+    // Trigger storage event
     window.dispatchEvent(new Event('storage'));
 
     logActivity(ACTIVITY_TYPES.PROFILE_UPDATE, {
@@ -221,13 +226,7 @@ const handleSaveProfile = async () => {
         return;
       }
 
-      await changePassword(
-        {
-          currentPassword: passwords.current,
-          newPassword: passwords.new,
-        },
-        token
-      );
+      await changePassword(passwords.current, passwords.new);
 
       logActivity(ACTIVITY_TYPES.PASSWORD_CHANGE, {
         action: "Password updated successfully",

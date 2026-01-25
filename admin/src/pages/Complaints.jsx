@@ -87,6 +87,19 @@ const Complaints = () => {
       });
     }
 
+    // ✅ NEW: Anonymous filter
+    if (currentFilters.anonymous) {
+      if (currentFilters.anonymous === 'anonymous') {
+        filtered = filtered.filter(c => c.isAnonymous === true);
+      } else if (currentFilters.anonymous === 'identified') {
+        filtered = filtered.filter(c => !c.isAnonymous);
+      } else if (currentFilters.anonymous === 'confidential') {
+        filtered = filtered.filter(c => c.type === 'confidential');
+      } else if (currentFilters.anonymous === 'sensitive') {
+        filtered = filtered.filter(c => c.type === 'sensitive');
+      }
+    }
+
     if (currentFilters.search && currentFilters.search.trim() !== "") {
       const term = currentFilters.search.toLowerCase();
       filtered = filtered.filter((c) => {

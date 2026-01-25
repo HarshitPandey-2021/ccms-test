@@ -173,9 +173,28 @@ export default function ComplaintTable({
               )}
 
               {/* Submitted By */}
+                           {/* Submitted By */}
               <div className="text-sm">
                 <span className="text-gray-500 dark:text-gray-400 text-xs">Submitted by:</span>
-                <p className="font-medium text-gray-700 dark:text-gray-300 truncate">{submittedBy}</p>
+                {complaint.isAnonymous ? (
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-lg">🕵️</span>
+                    <div>
+                      <p className="font-medium text-gray-700 dark:text-gray-300">Anonymous Student</p>
+                      {complaint.type && complaint.type !== 'general' && (
+                        <span className={`text-xs px-1.5 py-0.5 rounded inline-block mt-0.5 ${
+                          complaint.type === 'confidential' 
+                            ? 'bg-red-100 text-red-700'
+                            : 'bg-amber-100 text-amber-700'
+                        }`}>
+                          {complaint.type === 'confidential' ? '🔒 Confidential' : '⚠️ Sensitive'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="font-medium text-gray-700 dark:text-gray-300 truncate mt-1">{submittedBy}</p>
+                )}
               </div>
 
               {/* Date */}
@@ -234,44 +253,62 @@ export default function ComplaintTable({
   }
 
   // ===== DESKTOP TABLE VIEW =====
-  const columns = [
-    { key: "id", label: "ID", sortable: false },
-    { key: "subject", label: "Subject", sortable: true },
-    { key: "submittedBy", label: "Submitted", sortable: false },
-    { key: "category", label: "Category", sortable: true },
-    { key: "assignedTo", label: "Assigned To", sortable: false }, // ✅ NEW COLUMN
-    { key: "submittedAt", label: "Date", sortable: true },
-    { key: "status", label: "Status", sortable: false },
-    { key: "priority", label: "Priority", sortable: true },
-    { key: "actions", label: "Actions", sortable: false },
-  ];
+const columns = [
+  { key: "id", label: "ID", sortable: false },
+  { key: "subject", label: "Subject", sortable: true },
+  { key: "submittedBy", label: "Submitted By", sortable: false },
+  { key: "category", label: "Category", sortable: true },
+  { key: "priority", label: "Priority", sortable: true }, // ✅ RESTORED
+  { key: "assignedTo", label: "Assigned To", sortable: false },
+  { key: "submittedAt", label: "Date", sortable: true },
+  { key: "status", label: "Status", sortable: false },
+  { key: "actions", label: "Actions", sortable: false },
+];
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-b-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-x-auto">
       <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm">
-        <thead className="bg-gray-50 dark:bg-gray-900/50">
-          <tr>
-            {columns.map((col) => (
-              <th
-                key={col.key}
-                scope="col"
-                className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-300"
-              >
-                <div
-                  className={`flex items-center gap-1 ${
-                    col.sortable ? "cursor-pointer select-none" : ""
-                  }`}
-                  onClick={() => col.sortable && handleSort(col.key)}
-                >
-                  <span>{col.label}</span>
-                  {col.sortable && (
-                    <SortIcon columnKey={col.key} sortConfig={sortConfig} />
-                  )}
-                </div>
-              </th>
-            ))}
-          </tr>
-        </thead>
+<thead className="bg-gray-50 dark:bg-gray-900/50">
+  <tr>
+    {columns.map((col) => {
+      // ✅ Define fixed widths for each column
+      const getColumnWidth = () => {
+        switch(col.key) {
+          case 'id': return 'w-16'; // 64px
+          case 'subject': return 'w-64'; // 256px
+          case 'submittedBy': return 'w-48'; // 192px
+          case 'category': return 'w-32'; // 128px
+          case 'priority': return 'w-28'; // 112px
+          case 'assignedTo': return 'w-40'; // 160px - ✅ FIXED WIDTH
+          case 'submittedAt': return 'w-40'; // 160px
+          case 'status': return 'w-32'; // 128px
+          case 'actions': return 'w-48'; // 192px - ✅ FIXED WIDTH
+          default: return '';
+        }
+      };
+
+      return (
+        <th
+          key={col.key}
+          scope="col"
+          className={`px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-300 ${getColumnWidth()}`}
+        >
+          <div
+            className={`flex items-center gap-1 ${
+              col.sortable ? "cursor-pointer select-none" : ""
+            }`}
+            onClick={() => col.sortable && handleSort(col.key)}
+          >
+            <span>{col.label}</span>
+            {col.sortable && (
+              <SortIcon columnKey={col.key} sortConfig={sortConfig} />
+            )}
+          </div>
+        </th>
+      );
+    })}
+  </tr>
+</thead>
         <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-100 dark:divide-gray-700">
           {sortedComplaints.map((complaint, index) => {
             const id = complaint._id || complaint.id || index + 1;
@@ -313,73 +350,117 @@ export default function ComplaintTable({
                     </div>
                   </div>
                 </td>
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-200">
-                  {submittedBy}
+                                <td className="px-4 py-3 whitespace-nowrap">
+                  <div className="flex items-center gap-2">
+                    {complaint.isAnonymous ? (
+                      <>
+                        <div className="h-7 w-7 rounded-full bg-gradient-to-br from-gray-400 to-gray-600 flex items-center justify-center">
+                          <span className="text-sm">🕵️</span>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Anonymous Student
+                          </p>
+                          {complaint.type && complaint.type !== 'general' && (
+                            <span className={`text-xs px-1.5 py-0.5 rounded ${
+                              complaint.type === 'confidential' 
+                                ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                                : 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
+                            }`}>
+                              {complaint.type === 'confidential' ? '🔒 Confidential' : '⚠️ Sensitive'}
+                            </span>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <div className="h-7 w-7 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-medium">
+                          {submittedBy.charAt(0).toUpperCase()}
+                        </div>
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                          {submittedBy}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-200">
                   {category}
                 </td>
+                {/* 5. Priority - ✅ ADD THIS */}
+<td className="px-4 py-3 whitespace-nowrap">
+  {getPriorityBadge(priority)}
+</td>
                 {/* ✅ NEW: Assigned To Column */}
-                <td className="px-4 py-3 whitespace-nowrap">
-                  {assignedToName ? (
-                    <div className="flex items-center gap-2">
-                      <div className="h-7 w-7 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white text-xs font-medium">
-                        {assignedToName.charAt(0).toUpperCase()}
-                      </div>
-                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                        {assignedToName}
-                      </span>
-                    </div>
-                  ) : (
-                    <span className="text-sm text-gray-400 dark:text-gray-500 italic">
-                      Not assigned
-                    </span>
-                  )}
-                </td>
+                {/* 6. Assigned To - ✅ FIXED WIDTH */}
+<td className="px-4 py-3 w-40">
+  <div className="flex items-center gap-2 min-h-[28px]"> {/* ✅ Min height prevents collapse */}
+    {assignedToName ? (
+      <>
+        <div className="h-7 w-7 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white text-xs font-medium flex-shrink-0">
+          {assignedToName.charAt(0).toUpperCase()}
+        </div>
+        <span className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate">
+          {assignedToName}
+        </span>
+      </>
+    ) : (
+      <span className="text-sm text-gray-400 dark:text-gray-500 italic">
+        Not assigned
+      </span>
+    )}
+  </div>
+</td>
                 <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-200">
                   {formatDate(dateValue)}
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap">
                   <Badge status={status} />
                 </td>
-                <td className="px-4 py-3 whitespace-nowrap">
-                  {getPriorityBadge(priority)}
-                </td>
-                <td
-                  className="px-4 py-3 whitespace-nowrap"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div className="flex items-center gap-2">
-                    {/* View Button */}
-                    <button
-                      onClick={() => {
-                        console.log("👁️ View clicked for:", id);
-                        onActionClick && onActionClick("view", complaint);
-                      }}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 active:bg-indigo-800 transition-colors"
-                      title="View Details"
-                    >
-                      <RiEyeLine size={16} />
-                      View
-                    </button>
+                <td className="px-4 py-3 w-48" onClick={(e) => e.stopPropagation()}>
+  <div className="flex items-center gap-2 justify-end">
+    {/* Smart Primary Action Button */}
+    {(() => {
+      const isPending = status === "Pending";
+      const isInProgress = status === "In Progress" || status === "Assigned";
+      const isActive = isPending || isInProgress;
 
-                    {/* ✅ NEW: Assign/Reassign Button */}
-                    {canAssign(complaint) && onAssignClick && (
-                      <button
-                        onClick={() => onAssignClick(complaint)}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-                          assignedToName
-                            ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-900/50'
-                            : 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/50'
-                        }`}
-                        title={assignedToName ? 'Reassign' : 'Assign'}
-                      >
-                        <RiUserAddLine size={16} />
-                        {assignedToName ? 'Reassign' : 'Assign'}
-                      </button>
-                    )}
-                  </div>
-                </td>
+      if (isActive && canAssign(complaint) && onAssignClick) {
+        return (
+          <button
+            onClick={() => onAssignClick(complaint)}
+            className={`inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-lg transition-all shadow-sm ${
+              assignedToName
+                ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                : 'bg-amber-600 hover:bg-amber-700 text-white'
+            }`}
+            title={assignedToName ? `Assigned to ${assignedToName}` : 'Assign to staff'}
+          >
+            <RiUserAddLine size={16} />
+            <span className="hidden xl:inline">
+              {assignedToName ? 'Reassign' : 'Assign'}
+            </span>
+          </button>
+        );
+      }
+      return null;
+    })()}
+
+    {/* View Button (Always visible) */}
+    <button
+      onClick={() => {
+        console.log("👁️ View clicked for:", id);
+        onActionClick && onActionClick("view", complaint);
+      }}
+      className="inline-flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-all shadow-sm"
+      title="View Full Details"
+    >
+      <RiEyeLine size={16} />
+      <span className="hidden xl:inline">View</span>
+    </button>
+  </div>
+</td>
+                
               </tr>
             );
           })}

@@ -153,34 +153,52 @@ const Charts = ({ type = "bar", data = [], categoryData = [], statusData = [], t
           </ResponsiveContainer>
         );
 
-      case "line":
-        return (
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={data} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
-              <XAxis 
-                dataKey="name" 
-                tick={{ fill: chartTheme.text, fontSize: 12 }}
-                stroke={chartTheme.grid}
-              />
-              <YAxis 
-                tick={{ fill: chartTheme.text, fontSize: 12 }}
-                stroke={chartTheme.grid}
-              />
-              <Tooltip content={<CustomTooltip />} />
-              <Legend wrapperStyle={{ color: chartTheme.text }} />
-              <Line
-                type="monotone"
-                dataKey="value"
-                stroke="#4F46E5"
-                strokeWidth={2}
-                dot={{ fill: '#4F46E5', r: 4 }}
-                activeDot={{ r: 6 }}
-                name="Value"
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        );
+ case "line":
+  // ✅ FIXED: Handle both field name formats
+  const lineData = data.map(item => ({
+    name: item.day || item.date || item.name || 'N/A',
+    Submitted: item.Submitted || item.submitted || 0,
+    Resolved: item.Resolved || item.resolved || 0,
+  }));
+
+  return (
+    <ResponsiveContainer width="100%" height={300}>
+      <LineChart data={lineData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
+        <XAxis 
+          dataKey="name" 
+          tick={{ fill: chartTheme.text, fontSize: 12 }}
+          stroke={chartTheme.grid}
+        />
+        <YAxis 
+          tick={{ fill: chartTheme.text, fontSize: 12 }}
+          stroke={chartTheme.grid}
+        />
+        <Tooltip content={<CustomTooltip />} />
+        <Legend wrapperStyle={{ color: chartTheme.text }} />
+        
+        {/* ✅ TWO LINES: Submitted and Resolved */}
+        <Line
+          type="monotone"
+          dataKey="Submitted"
+          stroke="#4F46E5"
+          strokeWidth={2}
+          dot={{ fill: '#4F46E5', r: 4 }}
+          activeDot={{ r: 6 }}
+          name="Submitted"
+        />
+        <Line
+          type="monotone"
+          dataKey="Resolved"
+          stroke="#10B981"
+          strokeWidth={2}
+          dot={{ fill: '#10B981', r: 4 }}
+          activeDot={{ r: 6 }}
+          name="Resolved"
+        />
+      </LineChart>
+    </ResponsiveContainer>
+  );
 
       default:
         return (

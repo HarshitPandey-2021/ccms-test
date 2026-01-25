@@ -47,11 +47,12 @@ async function refreshAccessToken() {
     return null;
   } catch {
     logoutAdmin();
-    window.location.href = "https://ccms-home.vercel.app/login";
+    
+    // ✅ FIXED: Use relative path (works in any environment)
+    window.location.href = "/login";
     return null;
   }
 }
-
 async function getAuthHeaders() {
   let token = getAdminToken();
 
@@ -241,6 +242,7 @@ export async function getTrends(days = 7) {
   return handleResponse(res);
 }
 
+
 // ============================================
 // DEPARTMENTS
 // ============================================
@@ -392,7 +394,7 @@ export async function updateProfile(data) {
 
 export async function changePassword(currentPassword, newPassword) {
   const res = await apiCall(`${API_BASE}/auth/change-password`, {
-    method: "PUT",
+    method: "PUT", // ✅ Changed from POST to PUT
     body: JSON.stringify({ currentPassword, newPassword }),
   });
   return handleResponse(res);
@@ -469,7 +471,20 @@ export async function getAllLogs() {
 export async function logout() {
   logoutAdmin();
 }
+// ============================================
+// REVEAL ANONYMOUS IDENTITY (Super Admin Only)
+// ============================================
+
+export async function revealIdentity(complaintId) {
+  const res = await apiCall(`${API_BASE}/complaints/${complaintId}/reveal-identity`, {
+    method: "POST",
+  });
+  return handleResponse(res);
+}
+
+
 const api = {
+
   // Complaints
   getAllComplaints,
   getUnreadComplaints,
@@ -479,6 +494,7 @@ const api = {
   updateComplaint,
   markComplaintAsRead,
   getTrends,
+    revealIdentity, // ✅ ADD THIS LINE
   
   // Complaint Assignment - NEW
   assignComplaint,

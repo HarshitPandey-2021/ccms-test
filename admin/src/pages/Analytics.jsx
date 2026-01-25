@@ -106,23 +106,31 @@ const Analytics = () => {
 
       // Mock trend data (last 7 days) - you can replace with real API data
       // ✅ REPLACE WITH THIS:
-try {
-  const trendsResponse = await getTrends(7); // Get last 7 days
-  if (trendsResponse.success && trendsResponse.trends) {
-    const formattedTrends = trendsResponse.trends.map(t => ({
-      day: t.day,
-      date: t.date,
-      Submitted: t.submitted,
-      Resolved: t.resolved,
-    }));
-    setTrendData(formattedTrends);
-  } else {
-    setTrendData([]);
-  }
-} catch (err) {
-  console.error("Failed to fetch trends:", err);
-  setTrendData([]);
-}
+      // ✅ FIXED: Fetch real trend data from backend
+      try {
+        const trendsResponse = await getTrends(7);
+        console.log('📊 Frontend trends response:', trendsResponse);
+        
+        // ✅ Handle both response formats
+        const trendsArray = trendsResponse?.trends || trendsResponse?.data || trendsResponse;
+        
+        if (Array.isArray(trendsArray) && trendsArray.length > 0) {
+          const formattedTrends = trendsArray.map(t => ({
+            day: t.day,
+            date: t.date,
+            Submitted: t.submitted || 0,
+            Resolved: t.resolved || 0,
+          }));
+          setTrendData(formattedTrends);
+          console.log('✅ Trend data set:', formattedTrends);
+        } else {
+          console.warn('⚠️ No trend data received');
+          setTrendData([]);
+        }
+      } catch (err) {
+        console.error("❌ Failed to fetch trends:", err);
+        setTrendData([]);
+      }
 
       setLastUpdated(new Date());
 
@@ -251,6 +259,7 @@ try {
           <RiLineChartFill className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
           7-Day Trend
         </h3>
+        
         {trendData.length > 0 ? (
           <Charts type="line" data={trendData} />
         ) : (

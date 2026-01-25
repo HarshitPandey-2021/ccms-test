@@ -1,10 +1,10 @@
-// src/pages/SubmitComplaint.jsx - FIXED PROGRESS (0% START)
+// src/pages/SubmitComplaint.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
 import LoadingSpinner from '../components/common/LoadingSpinner';
-import { CATEGORIES, PRIORITIES } from '../utils/constants';
+import { CATEGORY_GROUPS, PRIORITIES, SENSITIVE_CATEGORIES,  isSensitiveCategory  } from '../utils/constants';
 import api from '../api';
 import {
   RiSendPlaneFill,
@@ -19,6 +19,9 @@ import {
   RiFlagLine,
   RiMapPinLine,
   RiFileTextLine,
+  RiShieldLine,
+  RiAlertLine,
+  RiLockLine,
 } from 'react-icons/ri';
 
 const SubmitComplaint = () => {
@@ -30,8 +33,9 @@ const SubmitComplaint = () => {
   const [formData, setFormData] = useState({
     subject: '',
     category: '',
+    categoryLabel: '',
     location: '',
-    priority: '', // ✅ CHANGED: Empty string (was 'Medium')
+    priority: '',
     description: '',
     isAnonymous: false,
   });
@@ -40,18 +44,10 @@ const SubmitComplaint = () => {
   const [errors, setErrors] = useState({});
   const [touched, setTouched] = useState({});
   const [dragActive, setDragActive] = useState(false);
+  const [selectedGroup, setSelectedGroup] = useState(null);
 
-  // Category icons
-  const categoryIcons = {
-    Fan: '🌀',
-    Light: '💡',
-    Projector: '📽️',
-    Furniture: '🪑',
-    Washroom: '🚻',
-    Water: '💧',
-    Internet: '📶',
-    Other: '📋',
-  };
+  // Check if selected category is sensitive
+  const isSensitive = SENSITIVE_CATEGORIES.includes(formData.category);
 
   // Priority colors
   const priorityColors = {
@@ -60,25 +56,20 @@ const SubmitComplaint = () => {
     High: 'bg-red-100 text-red-700 border-red-300 dark:bg-red-900/30 dark:text-red-400 dark:border-red-700',
   };
 
-// src/pages/SubmitComplaint.jsx - FIXED PROGRESS CALCULATION
+  // Progress calculation
+  const calculateProgress = () => {
+    let completed = 0;
+    const total = 5;
 
-// ✅ CHANGED: Progress calculation (images/PDF are OPTIONAL)
-const calculateProgress = () => {
-  let completed = 0;
-  const total = 5; // ✅ Changed from 6 to 5 (removed attachments from required)
+    if (formData.subject.trim().length >= 5) completed++;
+    if (formData.category) completed++;
+    if (formData.location.trim().length >= 5) completed++;
+    if (formData.priority) completed++;
+    if (formData.description.trim().length >= 20) completed++;
 
-  // Required fields only (5 fields = 20% each)
-  if (formData.subject.trim().length >= 5) completed++;
-  if (formData.category) completed++;
-  if (formData.location.trim().length >= 5) completed++;
-  if (formData.priority) completed++;
-  if (formData.description.trim().length >= 20) completed++;
-  
-  // ✅ REMOVED: Images/PDF from progress calculation
-  // if (images.length > 0 || pdf) completed++;
+    return Math.round((completed / total) * 100);
+  };
 
-  return Math.round((completed / total) * 100);
-};
   const progress = calculateProgress();
 
   // Validation
@@ -89,26 +80,21 @@ const calculateProgress = () => {
         if (value.length < 5) return 'Subject must be at least 5 characters';
         if (value.length > 100) return 'Subject must not exceed 100 characters';
         return '';
-
       case 'category':
         if (!value) return 'Please select a category';
         return '';
-
       case 'location':
         if (!value.trim()) return 'Location is required';
         if (value.length < 5) return 'Location must be at least 5 characters';
         return '';
-
       case 'priority':
-        if (!value) return 'Please select a priority'; // ✅ Added validation
+        if (!value) return 'Please select a priority';
         return '';
-
       case 'description':
         if (!value.trim()) return 'Description is required';
         if (value.length < 20) return 'Description must be at least 20 characters';
-        if (value.length > 500) return 'Description must not exceed 500 characters';
+        if (value.length > 2000) return 'Description must not exceed 2000 characters';
         return '';
-
       default:
         return '';
     }
@@ -135,18 +121,25 @@ const calculateProgress = () => {
     setErrors((prev) => ({ ...prev, [name]: error }));
   };
 
+  // Handle category selection
   const handleCategorySelect = (category) => {
-    setFormData((prev) => ({ ...prev, category }));
+    const isCategorySensitive = SENSITIVE_CATEGORIES.includes(category.id);
+    
+    setFormData((prev) => ({ 
+      ...prev, 
+      category: category.id,
+      categoryLabel: category.label,
+      // Auto-enable anonymous for sensitive categories
+      isAnonymous: isCategorySensitive ? true : prev.isAnonymous,
+    }));
     setTouched((prev) => ({ ...prev, category: true }));
-    const error = validateField('category', category);
-    setErrors((prev) => ({ ...prev, category: error }));
+    setErrors((prev) => ({ ...prev, category: '' }));
   };
 
   const handlePrioritySelect = (priority) => {
     setFormData((prev) => ({ ...prev, priority }));
     setTouched((prev) => ({ ...prev, priority: true }));
-    const error = validateField('priority', priority);
-    setErrors((prev) => ({ ...prev, priority: error }));
+    setErrors((prev) => ({ ...prev, priority: '' }));
   };
 
   // Validate all
@@ -155,7 +148,7 @@ const calculateProgress = () => {
     newErrors.subject = validateField('subject', formData.subject);
     newErrors.category = validateField('category', formData.category);
     newErrors.location = validateField('location', formData.location);
-    newErrors.priority = validateField('priority', formData.priority); // ✅ Added
+    newErrors.priority = validateField('priority', formData.priority);
     newErrors.description = validateField('description', formData.description);
 
     const filteredErrors = Object.fromEntries(
@@ -259,17 +252,25 @@ const calculateProgress = () => {
       const submitData = new FormData();
 
       submitData.append('subject', formData.subject.trim());
-      submitData.append('category', formData.category);
+      submitData.append('category', formData.categoryLabel); // Send label for display
+      submitData.append('categoryId', formData.category); // Send ID for processing
       submitData.append('location', formData.location.trim());
-      submitData.append('priority', formData.priority); // ✅ Now required
+      submitData.append('priority', formData.priority);
       submitData.append('description', formData.description.trim());
-      submitData.append('isAnonymous', formData.isAnonymous);
+      submitData.append('isAnonymous', formData.isAnonymous || isSensitive);
+      submitData.append('isSensitive', isSensitive);
 
       images.forEach((img) => submitData.append('images', img.file));
       if (pdf) submitData.append('pdfDocument', pdf);
 
       const response = await api.submitComplaint(submitData, token);
-      success(`Complaint submitted successfully! ID: ${response.complaint?.complaintId || ''}`);
+      
+      success(
+        isSensitive 
+          ? `Confidential complaint submitted securely! ID: ${response.complaint?.complaintId || ''}` 
+          : `Complaint submitted successfully! ID: ${response.complaint?.complaintId || ''}`
+      );
+      
       setTimeout(() => navigate('/user/my-complaints'), 1500);
     } catch (err) {
       console.error('Submit error:', err);
@@ -317,6 +318,39 @@ const calculateProgress = () => {
           </p>
         </div>
 
+        {/* ⚠️ SENSITIVE CATEGORY BANNER */}
+        {isSensitive && (
+          <div className="mb-6 p-4 bg-purple-50 dark:bg-purple-900/20 border-2 border-purple-300 dark:border-purple-700 rounded-xl animate-fadeIn">
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-purple-100 dark:bg-purple-800 rounded-lg">
+                <RiShieldLine className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div>
+                <h3 className="font-bold text-purple-800 dark:text-purple-300 mb-1">
+                  🔒 Confidential Complaint Mode
+                </h3>
+                <p className="text-sm text-purple-700 dark:text-purple-400">
+                  You've selected a <strong>sensitive category</strong>. Your complaint will be:
+                </p>
+                <ul className="text-sm text-purple-700 dark:text-purple-400 mt-2 space-y-1">
+                  <li className="flex items-center gap-2">
+                    <RiCheckLine className="h-4 w-4" />
+                    Automatically submitted <strong>anonymously</strong>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <RiCheckLine className="h-4 w-4" />
+                    Routed to <strong>specialized cell</strong> (Women's Cell / Anti-Ragging)
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <RiCheckLine className="h-4 w-4" />
+                    Handled with <strong>strict confidentiality</strong>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Progress Bar */}
         <div className="sticky top-16 md:top-16 z-40 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-4 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-b border-gray-200 dark:border-gray-700 shadow-sm mb-6">
           <div className="max-w-4xl mx-auto">
@@ -332,13 +366,21 @@ const calculateProgress = () => {
                 </div>
                 <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
                   <div
-                    className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-500 ease-out rounded-full"
+                    className={`h-full transition-all duration-500 ease-out rounded-full ${
+                      isSensitive 
+                        ? 'bg-gradient-to-r from-purple-500 to-pink-500' 
+                        : 'bg-gradient-to-r from-indigo-500 to-purple-500'
+                    }`}
                     style={{ width: `${progress}%` }}
                   />
                 </div>
               </div>
               {progress === 100 && (
-                <div className="flex-shrink-0 flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full text-xs font-bold">
+                <div className={`flex-shrink-0 flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 rounded-full text-xs font-bold ${
+                  isSensitive 
+                    ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400'
+                    : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                }`}>
                   <RiCheckLine className="h-4 w-4" />
                   <span className="hidden sm:inline">Ready!</span>
                 </div>
@@ -350,7 +392,11 @@ const calculateProgress = () => {
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Basic Info Card */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-            <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-4 sm:px-6 py-3 sm:py-4">
+            <div className={`px-4 sm:px-6 py-3 sm:py-4 ${
+              isSensitive 
+                ? 'bg-gradient-to-r from-purple-600 to-pink-600' 
+                : 'bg-gradient-to-r from-indigo-600 to-purple-600'
+            }`}>
               <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
                 <RiFileTextLine className="h-5 w-5 sm:h-6 sm:w-6" />
                 Basic Information
@@ -396,34 +442,105 @@ const calculateProgress = () => {
                 </div>
               </div>
 
-              {/* Category */}
+              {/* ✅ NEW: CATEGORY SELECTION WITH GROUPS */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
                   Category <span className="text-red-500">*</span>
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
-                  {CATEGORIES.map((cat) => (
-                    <button
-                      key={cat}
-                      type="button"
-                      onClick={() => handleCategorySelect(cat)}
-                      className={`p-3 sm:p-4 rounded-xl border-2 transition-all ${
-                        formData.category === cat
-                          ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 shadow-md scale-105'
-                          : 'border-gray-300 dark:border-gray-600 hover:border-indigo-400'
-                      }`}
-                    >
-                      <div className="text-2xl sm:text-3xl mb-1 sm:mb-2">{categoryIcons[cat]}</div>
-                      <p className={`text-xs sm:text-sm font-semibold ${
-                        formData.category === cat
-                          ? 'text-indigo-600 dark:text-indigo-400'
-                          : 'text-gray-700 dark:text-gray-300'
-                      }`}>
-                        {cat}
-                      </p>
-                    </button>
-                  ))}
+                
+                {/* Category Groups */}
+                <div className="space-y-4">
+                  {Object.entries(CATEGORY_GROUPS).map(([groupName, categories]) => {
+                    const hasSensitive = categories.some(c => c.sensitive);
+                    
+                    return (
+                      <div key={groupName} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                        {/* Group Header */}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedGroup(selectedGroup === groupName ? null : groupName)}
+                          className={`w-full px-4 py-3 flex items-center justify-between transition-all ${
+                            hasSensitive 
+                              ? 'bg-purple-50 dark:bg-purple-900/20 hover:bg-purple-100 dark:hover:bg-purple-900/30' 
+                              : 'bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-gray-800 dark:text-gray-200">
+                              {groupName}
+                            </span>
+                            {hasSensitive && (
+                              <span className="px-2 py-0.5 text-xs font-bold bg-purple-200 dark:bg-purple-800 text-purple-700 dark:text-purple-300 rounded-full">
+                                🔒 Confidential
+                              </span>
+                            )}
+                          </div>
+                          <span className={`transform transition-transform ${selectedGroup === groupName ? 'rotate-180' : ''}`}>
+                            ▼
+                          </span>
+                        </button>
+                        
+                        {/* Category Options */}
+                        {selectedGroup === groupName && (
+                          <div className="p-3 grid grid-cols-2 sm:grid-cols-3 gap-2 bg-white dark:bg-gray-800">
+                            {categories.map((cat) => (
+                              <button
+                                key={cat.id}
+                                type="button"
+                                onClick={() => handleCategorySelect(cat)}
+                                className={`p-3 rounded-lg border-2 transition-all text-left ${
+                                  formData.category === cat.id
+                                    ? cat.sensitive
+                                      ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/30 shadow-md'
+                                      : 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 shadow-md'
+                                    : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xl">{cat.icon}</span>
+                                  <div className="flex-1 min-w-0">
+                                    <p className={`text-sm font-semibold truncate ${
+                                      formData.category === cat.id
+                                        ? cat.sensitive 
+                                          ? 'text-purple-700 dark:text-purple-300'
+                                          : 'text-indigo-700 dark:text-indigo-300'
+                                        : 'text-gray-700 dark:text-gray-300'
+                                    }`}>
+                                      {cat.label}
+                                    </p>
+                                  </div>
+                                  {cat.sensitive && (
+                                    <RiLockLine className="h-4 w-4 text-purple-500 flex-shrink-0" />
+                                  )}
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
+
+                {/* Selected Category Display */}
+                {formData.category && (
+                  <div className={`mt-3 p-3 rounded-lg flex items-center gap-3 ${
+                    isSensitive 
+                      ? 'bg-purple-100 dark:bg-purple-900/30 border border-purple-300 dark:border-purple-700'
+                      : 'bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700'
+                  }`}>
+                    <RiCheckLine className={`h-5 w-5 ${isSensitive ? 'text-purple-600' : 'text-green-600'}`} />
+                    <span className={`font-semibold ${isSensitive ? 'text-purple-700 dark:text-purple-300' : 'text-green-700 dark:text-green-300'}`}>
+                      Selected: {formData.categoryLabel}
+                    </span>
+                    {isSensitive && (
+                      <span className="ml-auto text-xs bg-purple-200 dark:bg-purple-800 px-2 py-1 rounded text-purple-700 dark:text-purple-300">
+                        🔒 Confidential
+                      </span>
+                    )}
+                  </div>
+                )}
+
                 {touched.category && errors.category && (
                   <p className="text-xs sm:text-sm text-red-500 flex items-center gap-1 mt-2">
                     <RiErrorWarningLine className="h-4 w-4" />
@@ -437,6 +554,11 @@ const calculateProgress = () => {
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                   <RiMapPinLine className="inline h-4 w-4 mr-1" />
                   Location <span className="text-red-500">*</span>
+                  {isSensitive && (
+                    <span className="ml-2 text-xs text-purple-600 dark:text-purple-400">
+                      (Can be approximate for privacy)
+                    </span>
+                  )}
                 </label>
                 <div className="relative">
                   <input
@@ -445,7 +567,7 @@ const calculateProgress = () => {
                     value={formData.location}
                     onChange={handleChange}
                     onBlur={handleBlur}
-                    placeholder="e.g., Room 301, Block A"
+                    placeholder={isSensitive ? "e.g., Near Library, Campus Area" : "e.g., Room 301, Block A"}
                     className={`w-full px-4 py-2.5 sm:py-3 pr-12 rounded-lg border-2 transition-all ${
                       touched.location && errors.location
                         ? 'border-red-500 focus:ring-red-500'
@@ -466,7 +588,7 @@ const calculateProgress = () => {
                 )}
               </div>
 
-              {/* Priority - ✅ FIXED: No default selection */}
+              {/* Priority */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
                   <RiFlagLine className="inline h-4 w-4 mr-1" />
@@ -484,6 +606,9 @@ const calculateProgress = () => {
                           : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-gray-400'
                       }`}
                     >
+                      {priority === 'High' && '🔴 '}
+                      {priority === 'Medium' && '🟡 '}
+                      {priority === 'Low' && '🟢 '}
                       {priority}
                     </button>
                   ))}
@@ -500,20 +625,31 @@ const calculateProgress = () => {
               <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                   Description <span className="text-red-500">*</span>
+                  {isSensitive && (
+                    <span className="ml-2 text-xs text-purple-600 dark:text-purple-400">
+                      (Describe what happened - your identity is protected)
+                    </span>
+                  )}
                 </label>
                 <textarea
                   name="description"
                   value={formData.description}
                   onChange={handleChange}
                   onBlur={handleBlur}
-                  maxLength={500}
-                  rows={4}
-                  placeholder="Provide detailed description..."
+                  maxLength={2000}
+                  rows={isSensitive ? 6 : 4}
+                  placeholder={
+                    isSensitive 
+                      ? "Please describe the incident in detail. Include when it happened, who was involved (if comfortable sharing), and any other relevant information. Your identity is protected."
+                      : "Provide detailed description..."
+                  }
                   className={`w-full px-4 py-3 rounded-lg border-2 transition-all resize-none ${
                     touched.description && errors.description
                       ? 'border-red-500 focus:ring-red-500'
                       : touched.description && formData.description.length >= 20
                       ? 'border-green-500 focus:ring-green-500'
+                      : isSensitive
+                      ? 'border-purple-300 dark:border-purple-600 focus:ring-purple-500'
                       : 'border-gray-300 dark:border-gray-600 focus:ring-indigo-500'
                   } bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2`}
                 />
@@ -524,15 +660,15 @@ const calculateProgress = () => {
                       {errors.description}
                     </p>
                   )}
-                  <p className={`text-xs ml-auto font-semibold ${getCounterColor(formData.description.length, 500)}`}>
-                    {formData.description.length}/500
+                  <p className={`text-xs ml-auto font-semibold ${getCounterColor(formData.description.length, 2000)}`}>
+                    {formData.description.length}/2000
                   </p>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Attachments Card - (Keep same as before) */}
+          {/* Attachments Card */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
             <div className="bg-gradient-to-r from-purple-600 to-pink-600 px-4 sm:px-6 py-3 sm:py-4">
               <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
@@ -546,6 +682,11 @@ const calculateProgress = () => {
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
                   <RiImageAddLine className="inline h-4 w-4 mr-1" />
                   Images (Max 3, 2MB each)
+                  {isSensitive && (
+                    <span className="ml-2 text-xs text-purple-600 dark:text-purple-400">
+                      - Evidence photos (optional)
+                    </span>
+                  )}
                 </label>
                 {images.length < 3 && (
                   <div
@@ -647,31 +788,52 @@ const calculateProgress = () => {
             </div>
           </div>
 
-          {/* Privacy */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
-            <label className="flex items-start gap-3 sm:gap-4 cursor-pointer group">
-              <input
-                type="checkbox"
-                name="isAnonymous"
-                checked={formData.isAnonymous}
-                onChange={handleChange}
-                className="w-5 h-5 mt-0.5 rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-              />
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <RiEyeOffLine className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
-                  <span className="text-sm sm:text-base font-bold text-gray-800 dark:text-gray-200">
-                    Submit Anonymously
-                  </span>
+          {/* Privacy Toggle - Only show if NOT sensitive (sensitive is auto-anonymous) */}
+          {!isSensitive && (
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
+              <label className="flex items-start gap-3 sm:gap-4 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  name="isAnonymous"
+                  checked={formData.isAnonymous}
+                  onChange={handleChange}
+                  className="w-5 h-5 mt-0.5 rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <RiEyeOffLine className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                    <span className="text-sm sm:text-base font-bold text-gray-800 dark:text-gray-200">
+                      Submit Anonymously
+                    </span>
+                  </div>
+                  <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+                    Your identity will be hidden from public view
+                  </p>
                 </div>
-                <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                  Your identity will be hidden from public view
-                </p>
-              </div>
-            </label>
-          </div>
+              </label>
+            </div>
+          )}
 
-          {/* Buttons */}
+          {/* Sensitive Auto-Anonymous Notice */}
+          {isSensitive && (
+            <div className="bg-purple-50 dark:bg-purple-900/20 rounded-xl border-2 border-purple-300 dark:border-purple-700 p-4 sm:p-6">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-purple-100 dark:bg-purple-800 rounded-lg">
+                  <RiLockLine className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+                </div>
+                <div>
+                  <p className="font-bold text-purple-800 dark:text-purple-300">
+                    🔒 Your identity is automatically protected
+                  </p>
+                  <p className="text-sm text-purple-700 dark:text-purple-400">
+                    Sensitive complaints are always submitted anonymously for your safety.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Submit Buttons */}
           <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
             <button
               type="button"
@@ -684,7 +846,11 @@ const calculateProgress = () => {
             <button
               type="submit"
               disabled={loading || progress < 100}
-              className="w-full sm:flex-1 flex items-center justify-center gap-2 sm:gap-3 px-6 sm:px-8 py-3 sm:py-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
+              className={`w-full sm:flex-1 flex items-center justify-center gap-2 sm:gap-3 px-6 sm:px-8 py-3 sm:py-4 text-white font-bold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl ${
+                isSensitive
+                  ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700'
+                  : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700'
+              }`}
             >
               {loading ? (
                 <>
@@ -693,8 +859,8 @@ const calculateProgress = () => {
                 </>
               ) : (
                 <>
-                  <RiSendPlaneFill className="h-5 w-5" />
-                  <span>Submit Complaint</span>
+                  {isSensitive ? <RiShieldLine className="h-5 w-5" /> : <RiSendPlaneFill className="h-5 w-5" />}
+                  <span>{isSensitive ? 'Submit Confidentially' : 'Submit Complaint'}</span>
                 </>
               )}
             </button>
