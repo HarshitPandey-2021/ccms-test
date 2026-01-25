@@ -633,6 +633,87 @@ app.post("/api/auth/register/request-otp", async (req, res) => {
   }
 });
 
+// ============================================
+// REVEAL ANONYMOUS IDENTITY (Super Admin Only)
+// ============================================
+app.post(
+  "/api/complaints/:id/reveal-identity",
+  auth,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      // Get admin making the request
+      const admin = await Users.findOne({ _id: toObjectId(req.user.userId) });
+      
+      // ✅ ONLY Super Admin can reveal
+      if (admin.adminType !== "super") {
+        return res.status(403).json({
+          success: false,
+          message: "Only Super Admins can reveal anonymous identities"
+        });
+      }
+
+      // Get the complaint
+      const complaint = await Complaints.findOne({ _id: toObjectId(id) });
+      
+      if (!complaint) {
+        return res.status(404).json({
+          success: false,
+          message: "Complaint not found"
+        });
+      }
+
+      // Check if it's actually anonymous
+      if (!complaint.isAnonymous) {
+        return res.status(400).json({
+          success: false,
+          message: "This complaint is not anonymous"
+        });
+      }
+
+      // ✅ LOG THE ACTION for audit trail
+      await AdminLogs.insertOne({
+        adminId: req.user.userId,
+        adminName: admin.name,
+        adminEmail: admin.email,
+        action: "REVEAL_IDENTITY",
+        complaintId: id,
+        details: {
+          complaintSubject: complaint.subject || complaint.title,
+          revealedUser: complaint.submittedBy,
+          revealedEmail: complaint.email,
+          revealedRoll: complaint.roll,
+        },
+        timestamp: new Date(),
+        ipAddress: req.ip,
+      });
+
+      console.log(`🔓 Identity revealed for complaint ${id} by ${admin.email}`);
+
+      // Return the identity
+      res.json({
+        success: true,
+        identity: {
+          name: complaint.submittedBy || "Unknown",
+          email: complaint.email || "N/A",
+          roll: complaint.roll || complaint.rollNo || "N/A",
+          phone: complaint.phone || "Not provided",
+        },
+        message: "Identity revealed successfully. Action logged.",
+      });
+
+    } catch (error) {
+      console.error("Reveal identity error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to reveal identity"
+      });
+    }
+  }
+);
+
 
 // Step 2: Verify OTP and Complete Registration
 // app.post("/api/auth/register/verify-otp", async (req, res) => {
@@ -1144,6 +1225,13 @@ app.post(
 // backend/index.js - ADD THIS ENDPOINT
 
 // ✅ GET: Trend data (last 7 days)
+// ============================================
+// COMPLAINT TRENDS ENDPOINT
+// ============================================
+
+// ============================================
+// COMPLAINT TRENDS (FIXED - HANDLES BOTH DATE FIELDS)
+// ============================================
 app.get(
   "/api/complaints/admin/trends",
   auth,
@@ -1152,39 +1240,92 @@ app.get(
     try {
       const { days = 7 } = req.query;
       
+      const currentAdmin = await Users.findOne({ _id: toObjectId(req.user.userId) });
+      const adminType = currentAdmin?.adminType || "super";
+
+      // Build query based on admin type
+      let baseQuery = {};
+      
+      if (adminType === "department" && currentAdmin.department) {
+        baseQuery.department = currentAdmin.department;
+      } else if (adminType === "womens_cell") {
+        baseQuery.$or = [
+          { category: { $regex: /harassment/i } },
+          { category: { $regex: /eve teasing/i } },
+          { category: { $regex: /safety/i } },
+          { type: "confidential" },
+          { type: "sensitive" },
+        ];
+      } else if (adminType === "academic") {
+        baseQuery.$or = [
+          { category: { $regex: /academic/i } },
+          { category: { $regex: /exam/i } },
+        ];
+      } else if (adminType === "anti_ragging") {
+        baseQuery.$or = [
+          { category: { $regex: /ragging/i } },
+          { category: { $regex: /bullying/i } },
+        ];
+      }
+      
       const daysAgo = new Date();
       daysAgo.setDate(daysAgo.getDate() - parseInt(days));
+      daysAgo.setHours(0, 0, 0, 0);
 
-      // Aggregate complaints by day
+      console.log(`📅 Fetching trends from: ${daysAgo.toISOString()}`);
+
+      // ✅ FIX: Use $or to check both submittedAt AND createdAt
+      baseQuery.$or = baseQuery.$or || [];
+      baseQuery.$or.push(
+        { submittedAt: { $gte: daysAgo } },
+        { createdAt: { $gte: daysAgo } }
+      );
+
+      // Count total matching complaints
+      const totalCount = await Complaints.countDocuments(baseQuery);
+      console.log(`📊 Total complaints in range: ${totalCount}`);
+
+      // Aggregate by day (use whichever date field exists)
       const trends = await Complaints.aggregate([
+        { $match: baseQuery },
         {
-          $match: {
-            submittedAt: { $gte: daysAgo }
+          $addFields: {
+            dateField: {
+              $ifNull: ["$submittedAt", "$createdAt"] // Use submittedAt if exists, else createdAt
+            }
           }
         },
         {
           $group: {
             _id: {
-              $dateToString: { format: "%Y-%m-%d", date: "$submittedAt" }
+              $dateToString: { format: "%Y-%m-%d", date: "$dateField" }
             },
             submitted: { $sum: 1 },
             resolved: {
               $sum: {
-                $cond: [{ $eq: ["$status", "Resolved"] }, 1, 0]
+                $cond: [
+                  { $or: [
+                    { $eq: ["$status", "Resolved"] },
+                    { $eq: ["$Status", "Resolved"] } // Handle both cases
+                  ]}, 
+                  1, 
+                  0
+                ]
               }
             }
           }
         },
-        {
-          $sort: { _id: 1 }
-        }
+        { $sort: { _id: 1 } }
       ]).toArray();
+
+      console.log(`📈 Aggregated trends:`, trends);
 
       // Fill in missing days with 0
       const result = [];
       for (let i = parseInt(days) - 1; i >= 0; i--) {
         const date = new Date();
         date.setDate(date.getDate() - i);
+        date.setHours(0, 0, 0, 0);
         const dateStr = date.toISOString().split('T')[0];
         
         const found = trends.find(t => t._id === dateStr);
@@ -1197,16 +1338,19 @@ app.get(
         });
       }
 
+      console.log(`✅ Final trends data (${result.length} days):`, result);
+
       res.json({
         success: true,
         trends: result
       });
 
     } catch (error) {
-      console.error("Trends error:", error);
+      console.error("❌ Trends error:", error);
       res.status(500).json({ 
         success: false,
-        message: "Failed to fetch trends" 
+        message: "Failed to fetch trends",
+        error: error.message
       });
     }
   }
@@ -1472,33 +1616,72 @@ app.post("/api/auth/refresh", async (req, res) => {
   }
 });
 
-// ---------- CHANGE PASSWORD ----------
-app.post("/api/auth/change-password", auth, async (req, res) => {
+// ============================================
+// CHANGE PASSWORD (FIXED - HANDLES OBJECT PASSWORD)
+// ============================================
+app.put("/api/auth/change-password", auth, async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
+    
+    console.log('🔑 Password change request from:', req.user.email);
+    
     if (!currentPassword || !newPassword) {
-      return res
-        .status(400)
-        .json({ message: "Current and new password required" });
+      return res.status(400).json({ 
+        success: false,
+        message: "Current and new password required" 
+      });
     }
 
     if (newPassword.length < 6) {
-      return res
-        .status(400)
-        .json({ message: "New password must be at least 6 characters" });
+      return res.status(400).json({ 
+        success: false,
+        message: "New password must be at least 6 characters" 
+      });
     }
 
     const user = await Users.findOne({
       _id: toObjectId(req.user.userId),
     });
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    const isMatch = await bcrypt.compare(currentPassword, user.password);
-    if (!isMatch) {
-      return res.status(401).json({ message: "Current password incorrect" });
+    
+    if (!user) {
+      return res.status(404).json({ 
+        success: false,
+        message: "User not found" 
+      });
     }
 
+    // ✅ FIX: Handle password being an object or string
+    let storedPassword = user.password;
+    
+    // If password is an object, extract the string value
+    if (typeof storedPassword === 'object' && storedPassword !== null) {
+      storedPassword = storedPassword.toString();
+    }
+    
+    // Ensure we have a valid password string
+    if (!storedPassword || typeof storedPassword !== 'string') {
+      console.error('❌ Invalid password format in database for user:', user.email);
+      return res.status(500).json({
+        success: false,
+        message: "Password data is corrupted. Please contact support."
+      });
+    }
+
+    console.log('🔍 Password type check:', typeof storedPassword, storedPassword.substring(0, 10) + '...');
+
+    // Compare passwords
+    const isMatch = await bcrypt.compare(currentPassword, storedPassword);
+    
+    if (!isMatch) {
+      return res.status(401).json({ 
+        success: false,
+        message: "Current password is incorrect" 
+      });
+    }
+
+    // Hash new password
     const hash = await bcrypt.hash(newPassword, 10);
+    
     await Users.updateOne(
       { _id: toObjectId(req.user.userId) },
       { $set: { password: hash, updatedAt: new Date() } }
@@ -1512,10 +1695,19 @@ app.post("/api/auth/change-password", auth, async (req, res) => {
       });
     }
 
-    return res.json({ message: "Password changed successfully" });
+    console.log('✅ Password changed for:', user.email);
+
+    return res.json({ 
+      success: true,
+      message: "Password changed successfully" 
+    });
   } catch (e) {
-    console.error("Change password error:", e);
-    return res.status(500).json({ message: "Internal server error" });
+    console.error("❌ Change password error:", e);
+    return res.status(500).json({ 
+      success: false,
+      message: "Internal server error",
+      error: e.message 
+    });
   }
 });
 
@@ -1670,6 +1862,8 @@ app.post(
         'ac': 'Maintenance',
         'building': 'Maintenance',
         'infrastructure': 'Maintenance',
+        'fan': 'Maintenance',
+        'light': 'Maintenance',
         
         // Tech → IT Department
         'wifi': 'IT Department',
@@ -1687,6 +1881,7 @@ app.post(
         'garbage': 'Housekeeping',
         'sanitation': 'Housekeeping',
         'hygiene': 'Housekeeping',
+        'water': 'Housekeeping',
         
         // Sensitive → Special Cells
         'harassment': "Women's Cell",
@@ -1720,6 +1915,9 @@ app.post(
         // Library
         'library': 'Library',
         'books': 'Library',
+        
+        // Other
+        'other': null,
       };
 
       // Try to match category to department
@@ -1755,6 +1953,41 @@ app.post(
       }
       // ========== END AUTO-ASSIGN DEPARTMENT ==========
 
+      // ✅ NEW: Determine if complaint should be anonymous
+      const sensitiveCategories = [
+        'harassment', 'eve teasing', 'safety', 'ragging', 
+        'bullying', 'discrimination', 'abuse', 'assault',
+        'women', 'personal', 'confidential'
+      ];
+
+      // Auto-mark as anonymous if category is sensitive
+      const isSensitiveCategory = sensitiveCategories.some(cat => 
+        categoryLower.includes(cat)
+      );
+
+      // Complaint is anonymous if:
+      // 1. Student explicitly checked the box, OR
+      // 2. Category is sensitive (auto-anonymous for safety)
+      const shouldBeAnonymous = 
+        isAnonymous === "true" || 
+        isAnonymous === true || 
+        isSensitiveCategory;
+
+      // ✅ NEW: Determine complaint type based on sensitivity
+      let complaintType = "general";
+      
+      if (categoryLower.includes('harassment') || 
+          categoryLower.includes('assault') || 
+          categoryLower.includes('abuse') ||
+          categoryLower.includes('eve teasing')) {
+        complaintType = "confidential"; // Highest privacy
+      } else if (categoryLower.includes('ragging') || 
+                 categoryLower.includes('discrimination') ||
+                 categoryLower.includes('bullying') ||
+                 categoryLower.includes('safety')) {
+        complaintType = "sensitive"; // Moderate privacy
+      }
+
       const complaint = {
         complaintId,
         userId,
@@ -1771,8 +2004,11 @@ app.post(
         pdfPublicId,
         status: "Pending",
         adminRemarks: "",
-        isAnonymous:
-          isAnonymous === "true" || isAnonymous === true ? true : false,
+        
+        // ✅ UPDATED: Anonymous handling
+        isAnonymous: shouldBeAnonymous,
+        type: complaintType,
+        
         submittedAt: now,
         createdAt: now,
         updatedAt: now,
@@ -1783,11 +2019,13 @@ app.post(
           {
             status: "Pending",
             timestamp: now,
-            message: "Complaint submitted",
+            message: shouldBeAnonymous 
+              ? "Anonymous complaint submitted" 
+              : "Complaint submitted",
           },
         ],
         
-        // ✅ NEW: Department & Assignment Fields
+        // Department & Assignment Fields
         department: departmentId,
         departmentName: departmentName,
         assignedTo: null,
@@ -1798,6 +2036,8 @@ app.post(
       };
 
       const r = await Complaints.insertOne(complaint);
+
+      console.log(`✅ Complaint created: ${complaintId} (Anonymous: ${shouldBeAnonymous}, Type: ${complaintType}, Dept: ${departmentName || 'None'})`);
 
       res.status(201).json({
         id: r.insertedId,
