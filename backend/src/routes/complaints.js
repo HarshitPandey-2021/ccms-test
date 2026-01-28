@@ -7,15 +7,10 @@ const upload = require("../middleware/upload");
 
 // ==================== PUBLIC ROUTES (NO AUTH) ====================
 
-// Get landing page stats (public endpoint)
-router.get(
-  "/public/stats",
-  complaintsController.getLandingStats
-);
+router.get("/public/stats", complaintsController.getLandingStats);
 
 // ==================== ADMIN ROUTES ====================
 
-// Get all complaints
 router.get(
   "/admin/all",
   auth,
@@ -23,7 +18,6 @@ router.get(
   complaintsController.getAllComplaints
 );
 
-// Get analytics
 router.get(
   "/admin/analytics",
   auth,
@@ -31,7 +25,6 @@ router.get(
   complaintsController.getAnalyticsData
 );
 
-// ✅ FIXED: Get unread complaints (using the correct function)
 router.get(
   "/admin/unread",
   auth,
@@ -39,7 +32,6 @@ router.get(
   complaintsController.getUnreadComplaints
 );
 
-// ✅ NEW: Admin update complaint (edit title, description, category, etc.)
 router.put(
   "/admin/:id",
   auth,
@@ -51,7 +43,6 @@ router.put(
   complaintsController.updateComplaint
 );
 
-// Update complaint status (resolve, reject, start work)
 router.put(
   "/admin/:id/status",
   auth,
@@ -59,7 +50,6 @@ router.put(
   complaintsController.updateComplaintStatus
 );
 
-// Mark complaint as read
 router.patch(
   "/admin/:id/read",
   auth,
@@ -67,7 +57,6 @@ router.patch(
   complaintsController.markComplaintAsRead
 );
 
-// Get complaint by ID (admin)
 router.get(
   "/admin/:id",
   auth,
@@ -77,7 +66,6 @@ router.get(
 
 // ==================== STUDENT ROUTES ====================
 
-// Create new complaint
 router.post(
   "/",
   auth,
@@ -89,7 +77,6 @@ router.post(
   complaintsController.createComplaint
 );
 
-// Get my complaints
 router.get(
   "/mine",
   auth,
@@ -97,7 +84,6 @@ router.get(
   complaintsController.getUserComplaints
 );
 
-// Update my complaint (student only)
 router.put(
   "/:id",
   auth,
@@ -109,13 +95,16 @@ router.put(
   complaintsController.updateComplaint
 );
 
+// ✅ FEEDBACK ROUTE - Student submits feedback for resolved complaint
+router.post(
+  "/:id/feedback",
+  auth,
+  requireRole("student"),
+  complaintsController.submitFeedback  // We'll create this function
+);
+
 // ==================== SHARED ROUTES ====================
 
-// Get complaint by ID (role-based access in controller)
-router.get(
-  "/:id",
-  auth,
-  complaintsController.getComplaintById
-);
+router.get("/:id", auth, complaintsController.getComplaintById);
 
 module.exports = router;

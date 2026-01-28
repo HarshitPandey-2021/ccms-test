@@ -1,4 +1,4 @@
-// src/pages/MyComplaints.jsx - BEAUTIFUL FILTERS & SEARCH
+// user-portal/src/pages/MyComplaints.jsx - WITH FEEDBACK
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
@@ -10,22 +10,30 @@ import {
   RiCheckboxCircleLine,
   RiAlertLine,
   RiCloseCircleLine,
-  RiLoader4Line,
   RiDownloadLine,
   RiCalendarLine,
   RiMapPinLine,
   RiUserLine,
   RiEyeOffLine,
-  RiCloseLine, // ✅ For clear search
-  RiRefreshLine, // ✅ For clear filters
+  RiCloseLine,
+  RiRefreshLine,
+  RiStarFill,
+  RiStarLine,
 } from "react-icons/ri";
+// import toast from "react-hot-toast";
+import { useToast } from "../hooks/useToast";
 import api from "../api";
 import Badge from "../components/common/Badge";
 import Loading from "../components/common/Loading";
+import FeedbackModal from "../components/FeedbackModal";
+
+
 
 const MyComplaints = () => {
   const navigate = useNavigate();
   const location = useLocation();
+
+  const toast = useToast();
 
   const initialStatus = location.state?.filterStatus
     ? location.state.filterStatus.toLowerCase()
@@ -36,6 +44,12 @@ const MyComplaints = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState(initialStatus);
   const [categoryFilter, setCategoryFilter] = useState("all");
+  
+  // ✅ Feedback Modal State
+  const [feedbackModal, setFeedbackModal] = useState({
+    isOpen: false,
+    complaint: null,
+  });
 
   useEffect(() => {
     fetchComplaints();
@@ -50,8 +64,8 @@ const MyComplaints = () => {
   const fetchComplaints = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem("token");
-      const data = await api.getMyComplaints(token);
+      const data = await api.getMyComplaints();
+      console.log('📋 Fetched complaints:', data); // Debug log
       setComplaints(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error("Failed to fetch complaints:", error);
@@ -60,6 +74,23 @@ const MyComplaints = () => {
       setLoading(false);
     }
   };
+  
+
+// ✅ FIXED: Use toast (lowercase) not useToast
+const handleFeedbackSubmit = async (feedbackData) => {
+  try {
+    await api.submitFeedback(feedbackData.complaintId, {
+      rating: feedbackData.rating,
+      satisfaction: feedbackData.satisfaction,
+      feedback: feedbackData.feedback,
+    });
+    toast.success("Thank you for your feedback! 🎉");  // ✅ toast not useToast
+    fetchComplaints();
+  } catch (error) {
+    toast.error(error.message || "Failed to submit feedback");  // ✅ toast not useToast
+    throw error;
+  }
+};
 
   const getStatusIcon = (status) => {
     const statusLower = status?.toLowerCase();
@@ -75,23 +106,6 @@ const MyComplaints = () => {
         return <RiCloseCircleLine className="w-4 h-4 sm:w-5 sm:h-5 text-red-500" />;
       default:
         return <RiTimeLine className="w-4 h-4 sm:w-5 sm:h-5 text-gray-500" />;
-    }
-  };
-
-  const getStatusColor = (status) => {
-    const statusLower = status?.toLowerCase();
-    switch (statusLower) {
-      case "pending":
-        return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400";
-      case "in-progress":
-      case "in progress":
-        return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400";
-      case "resolved":
-        return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400";
-      case "rejected":
-        return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
-      default:
-        return "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400";
     }
   };
 
@@ -134,136 +148,200 @@ const MyComplaints = () => {
     });
   };
 
-  // ✅ Clear all filters
   const clearAllFilters = () => {
     setSearchTerm("");
     setStatusFilter("all");
     setCategoryFilter("all");
   };
 
-  // ✅ Check if any filter is active
   const hasActiveFilters = searchTerm || statusFilter !== "all" || categoryFilter !== "all";
 
-  const ComplaintCard = ({ complaint }) => (
-    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden hover:shadow-md transition-all">
-      <div className="p-4 sm:p-6">
-        <div className="flex items-start justify-between gap-2 mb-3">
-          <div className="flex-1 min-w-0">
-            {/* Complaint ID & Anonymous Badge */}
-            <div className="flex items-center gap-2 flex-wrap mb-2">
-              <span className="text-xs font-mono text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
-                {complaint.complaintId}
-              </span>
-              {complaint.isAnonymous && (
-                <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded-full text-xs font-semibold">
-                  <RiEyeOffLine className="h-3 w-3" />
-                  <span className="hidden xs:inline">Anonymous</span>
+  // ✅ Check if complaint is resolved (handles different cases)
+  const isComplaintResolved = (status) => {
+    if (!status) return false;
+    const s = status.toLowerCase().trim();
+    return s === 'resolved';
+  };
+
+  // ✅ Complaint Card with Feedback Section
+  const ComplaintCard = ({ complaint }) => {
+    // Debug logging
+    const resolved = isComplaintResolved(complaint.status);
+    console.log(`📋 Card: ${complaint.complaintId} | Status: "${complaint.status}" | Resolved: ${resolved} | Has Feedback: ${!!complaint.feedback?.rating}`);
+
+    return (
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden hover:shadow-md transition-all">
+        <div className="p-4 sm:p-6">
+          {/* Header */}
+          <div className="flex items-start justify-between gap-2 mb-3">
+            <div className="flex-1 min-w-0">
+              {/* Complaint ID & Anonymous Badge */}
+              <div className="flex items-center gap-2 flex-wrap mb-2">
+                <span className="text-xs font-mono text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
+                  {complaint.complaintId}
                 </span>
+                {complaint.isAnonymous && (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded-full text-xs font-semibold">
+                    <RiEyeOffLine className="h-3 w-3" />
+                    <span className="hidden xs:inline">Anonymous</span>
+                  </span>
+                )}
+              </div>
+
+              {/* Subject */}
+              <h3 className="text-base sm:text-lg font-bold text-gray-800 dark:text-gray-200 mb-2 line-clamp-2">
+                {complaint.subject}
+              </h3>
+
+              {/* Description */}
+              <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2 mb-3">
+                {complaint.description}
+              </p>
+            </div>
+
+            {/* Status Badge & Icon */}
+            <div className="flex flex-col items-end gap-2 flex-shrink-0">
+              {getStatusIcon(complaint.status)}
+              <Badge status={complaint.status} />
+            </div>
+          </div>
+
+          {/* Details Grid */}
+          <div className="grid grid-cols-2 gap-3 mb-4 text-xs sm:text-sm">
+            <div>
+              <span className="text-gray-500 dark:text-gray-400 block mb-1">Category</span>
+              <span className="font-semibold text-gray-700 dark:text-gray-300">
+                {complaint.category}
+              </span>
+            </div>
+            <div>
+              <span className="text-gray-500 dark:text-gray-400 block mb-1">Priority</span>
+              <span className={getPriorityColor(complaint.priority)}>
+                {complaint.priority}
+              </span>
+            </div>
+            <div className="col-span-2">
+              <span className="text-gray-500 dark:text-gray-400 block mb-1">
+                <RiMapPinLine className="inline h-3 w-3 mr-1" />
+                Location
+              </span>
+              <span className="font-medium text-gray-700 dark:text-gray-300">
+                {complaint.location}
+              </span>
+            </div>
+            <div className="col-span-2">
+              <span className="text-gray-500 dark:text-gray-400 block mb-1">
+                <RiCalendarLine className="inline h-3 w-3 mr-1" />
+                Submitted
+              </span>
+              <span className="font-medium text-gray-700 dark:text-gray-300">
+                {formatDate(complaint.submittedAt || complaint.createdAt)}
+              </span>
+            </div>
+          </div>
+
+          {/* Assigned To */}
+          {complaint.assignedTo && (
+            <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+              <div className="flex items-center gap-2 text-sm">
+                <RiUserLine className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                <span className="text-gray-600 dark:text-gray-400">Assigned to:</span>
+                <span className="font-semibold text-blue-700 dark:text-blue-400 truncate">
+                  {complaint.assignedTo.name || complaint.assignedTo}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* PDF Download */}
+          {complaint.pdfDocument && (
+            <a
+              href={complaint.pdfDocument}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 text-sm font-semibold mb-4 transition-colors"
+            >
+              <RiDownloadLine className="w-4 h-4" />
+              Download Document
+            </a>
+          )}
+
+          {/* Action Buttons */}
+          <div className="flex gap-2 sm:gap-3">
+            <button
+              onClick={() => navigate(`/user/complaints/${complaint._id}`)}
+              className="flex-1 flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 transition-colors font-semibold text-sm"
+            >
+              <RiEyeLine className="w-4 h-4" />
+              <span className="hidden xs:inline">View</span>
+              <span className="xs:hidden">Details</span>
+            </button>
+
+            {complaint.status?.toLowerCase() === "pending" && !complaint.assignedTo && (
+              <button
+                onClick={() => navigate(`/user/complaints/${complaint._id}/edit`)}
+                className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 border-2 border-indigo-600 text-indigo-600 dark:border-indigo-500 dark:text-indigo-400 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors font-semibold text-sm"
+              >
+                <RiEditLine className="w-4 h-4" />
+                <span className="hidden sm:inline">Edit</span>
+              </button>
+            )}
+          </div>
+
+          {/* ========================================== */}
+          {/* ✅ FEEDBACK SECTION - FOR RESOLVED ONLY   */}
+          {/* ========================================== */}
+          {resolved && (
+            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+              {complaint.feedback?.rating ? (
+                // ✅ Already Submitted Feedback - Show Stars
+                <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-200 dark:border-green-800">
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Your Rating:
+                    </span>
+                    <div className="flex gap-0.5">
+                      {[1, 2, 3, 4, 5].map((star) =>
+                        star <= complaint.feedback.rating ? (
+                          <RiStarFill key={star} className="w-5 h-5 text-yellow-400" />
+                        ) : (
+                          <RiStarLine key={star} className="w-5 h-5 text-gray-300 dark:text-gray-600" />
+                        )
+                      )}
+                    </div>
+                  </div>
+                  <span className="text-xs text-green-600 dark:text-green-400 font-bold flex items-center gap-1">
+                    <RiCheckboxCircleLine className="w-4 h-4" />
+                    Submitted
+                  </span>
+                </div>
+              ) : (
+                // ✅ Show "Rate Your Experience" Button
+                <button
+                  onClick={() => {
+                    console.log('🌟 Opening feedback modal for:', complaint.complaintId);
+                    setFeedbackModal({ isOpen: true, complaint });
+                  }}
+                  className="w-full flex items-center justify-center gap-3 py-3.5 bg-gradient-to-r from-amber-50 to-yellow-50 dark:from-amber-900/20 dark:to-yellow-900/20 border-2 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 rounded-xl hover:from-amber-100 hover:to-yellow-100 dark:hover:from-amber-900/30 dark:hover:to-yellow-900/30 transition-all group shadow-sm hover:shadow-md"
+                >
+                  <div className="flex gap-0.5">
+                    {[1, 2, 3, 4, 5].map((i) => (
+                      <RiStarLine
+                        key={i}
+                        className="w-5 h-5 group-hover:text-yellow-500 transition-all duration-200"
+                      />
+                    ))}
+                  </div>
+                  <span className="font-bold text-sm sm:text-base">Rate Your Experience</span>
+                </button>
               )}
             </div>
-
-            {/* Subject */}
-            <h3 className="text-base sm:text-lg font-bold text-gray-800 dark:text-gray-200 mb-2 line-clamp-2">
-              {complaint.subject}
-            </h3>
-
-            {/* Description */}
-            <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2 mb-3">
-              {complaint.description}
-            </p>
-          </div>
-
-          {/* Status Badge & Icon */}
-          <div className="flex flex-col items-end gap-2 flex-shrink-0">
-            {getStatusIcon(complaint.status)}
-            <Badge status={complaint.status} />
-          </div>
-        </div>
-
-        {/* Details Grid */}
-        <div className="grid grid-cols-2 gap-3 mb-4 text-xs sm:text-sm">
-          <div>
-            <span className="text-gray-500 dark:text-gray-400 block mb-1">Category</span>
-            <span className="font-semibold text-gray-700 dark:text-gray-300">
-              {complaint.category}
-            </span>
-          </div>
-          <div>
-            <span className="text-gray-500 dark:text-gray-400 block mb-1">Priority</span>
-            <span className={getPriorityColor(complaint.priority)}>
-              {complaint.priority}
-            </span>
-          </div>
-          <div className="col-span-2">
-            <span className="text-gray-500 dark:text-gray-400 block mb-1">
-              <RiMapPinLine className="inline h-3 w-3 mr-1" />
-              Location
-            </span>
-            <span className="font-medium text-gray-700 dark:text-gray-300">
-              {complaint.location}
-            </span>
-          </div>
-          <div className="col-span-2">
-            <span className="text-gray-500 dark:text-gray-400 block mb-1">
-              <RiCalendarLine className="inline h-3 w-3 mr-1" />
-              Submitted
-            </span>
-            <span className="font-medium text-gray-700 dark:text-gray-300">
-              {formatDate(complaint.submittedAt || complaint.createdAt)}
-            </span>
-          </div>
-        </div>
-
-        {/* Assigned To */}
-        {complaint.assignedTo && (
-          <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-            <div className="flex items-center gap-2 text-sm">
-              <RiUserLine className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-              <span className="text-gray-600 dark:text-gray-400">Assigned to:</span>
-              <span className="font-semibold text-blue-700 dark:text-blue-400 truncate">
-                {complaint.assignedTo.name || complaint.assignedTo}
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* PDF Download */}
-        {complaint.pdfDocument && (
-          <a
-            href={complaint.pdfDocument}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 text-sm font-semibold mb-4 transition-colors"
-          >
-            <RiDownloadLine className="w-4 h-4" />
-            Download Document
-          </a>
-        )}
-
-        {/* Action Buttons */}
-        <div className="flex gap-2 sm:gap-3">
-          <button
-            onClick={() => navigate(`/user/complaints/${complaint._id}`)}
-            className="flex-1 flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 transition-colors font-semibold text-sm"
-          >
-            <RiEyeLine className="w-4 h-4" />
-            <span className="hidden xs:inline">View</span>
-            <span className="xs:hidden">Details</span>
-          </button>
-
-          {complaint.status?.toLowerCase() === "pending" && !complaint.assignedTo && (
-            <button
-              onClick={() => navigate(`/user/complaints/${complaint._id}/edit`)}
-              className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 border-2 border-indigo-600 text-indigo-600 dark:border-indigo-500 dark:text-indigo-400 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors font-semibold text-sm"
-            >
-              <RiEditLine className="w-4 h-4" />
-              <span className="hidden sm:inline">Edit</span>
-            </button>
           )}
+          {/* ========================================== */}
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   if (loading) {
     return (
@@ -285,7 +363,7 @@ const MyComplaints = () => {
         </p>
       </div>
 
-      {/* ✅ BEAUTIFUL FILTERS SECTION */}
+      {/* Filters Section */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 p-4 sm:p-6 mb-6">
         <div className="space-y-4">
           {/* Search Bar */}
@@ -302,14 +380,13 @@ const MyComplaints = () => {
               <button
                 onClick={() => setSearchTerm("")}
                 className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors"
-                aria-label="Clear search"
               >
                 <RiCloseLine className="w-5 h-5 text-gray-500 dark:text-gray-400" />
               </button>
             )}
           </div>
 
-          {/* Filter Chips Row */}
+          {/* Filter Dropdowns */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             {/* Status Filter */}
             <div className="relative">
@@ -321,13 +398,7 @@ const MyComplaints = () => {
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  className="w-full pl-10 pr-10 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 appearance-none dark:bg-gray-700 dark:text-gray-200 transition-all cursor-pointer text-sm sm:text-base font-medium bg-white dark:bg-gray-700"
-                  style={{
-                    backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
-                    backgroundPosition: 'right 0.5rem center',
-                    backgroundRepeat: 'no-repeat',
-                    backgroundSize: '1.5em 1.5em',
-                  }}
+                  className="w-full pl-10 pr-10 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 appearance-none dark:bg-gray-700 dark:text-gray-200 transition-all cursor-pointer text-sm sm:text-base font-medium bg-white"
                 >
                   <option value="all">All Status</option>
                   <option value="pending">🟡 Pending</option>
@@ -348,13 +419,7 @@ const MyComplaints = () => {
                 <select
                   value={categoryFilter}
                   onChange={(e) => setCategoryFilter(e.target.value)}
-                  className="w-full pl-10 pr-10 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 appearance-none dark:bg-gray-700 dark:text-gray-200 transition-all cursor-pointer text-sm sm:text-base font-medium bg-white dark:bg-gray-700"
-                  style={{
-                    backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
-                    backgroundPosition: 'right 0.5rem center',
-                    backgroundRepeat: 'no-repeat',
-                    backgroundSize: '1.5em 1.5em',
-                  }}
+                  className="w-full pl-10 pr-10 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 appearance-none dark:bg-gray-700 dark:text-gray-200 transition-all cursor-pointer text-sm sm:text-base font-medium bg-white"
                 >
                   <option value="all">All Categories</option>
                   <option value="Fan">🌀 Fan</option>
@@ -370,35 +435,35 @@ const MyComplaints = () => {
             </div>
           </div>
 
-          {/* Active Filters & Clear Button */}
+          {/* Active Filters */}
           {hasActiveFilters && (
             <div className="flex items-center justify-between gap-3 pt-3 border-t border-gray-200 dark:border-gray-700">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">
-                  Active Filters:
+                  Active:
                 </span>
                 {searchTerm && (
-                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 rounded-lg text-xs font-medium">
-                    Search: "{searchTerm.substring(0, 15)}{searchTerm.length > 15 ? '...' : ''}"
+                  <span className="px-2 py-1 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 rounded-lg text-xs font-medium">
+                    "{searchTerm.substring(0, 15)}{searchTerm.length > 15 ? '...' : ''}"
                   </span>
                 )}
                 {statusFilter !== "all" && (
-                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-lg text-xs font-medium">
-                    Status: {statusFilter}
+                  <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-lg text-xs font-medium">
+                    {statusFilter}
                   </span>
                 )}
                 {categoryFilter !== "all" && (
-                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded-lg text-xs font-medium">
-                    Category: {categoryFilter}
+                  <span className="px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded-lg text-xs font-medium">
+                    {categoryFilter}
                   </span>
                 )}
               </div>
               <button
                 onClick={clearAllFilters}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all active:scale-95 border border-red-200 dark:border-red-800"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800"
               >
                 <RiRefreshLine className="h-3.5 w-3.5" />
-                Clear All
+                Clear
               </button>
             </div>
           )}
@@ -414,21 +479,21 @@ const MyComplaints = () => {
           </h3>
           <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mb-6">
             {hasActiveFilters
-              ? "Try adjusting your filters or search terms"
+              ? "Try adjusting your filters"
               : "You haven't submitted any complaints yet"}
           </p>
           {hasActiveFilters ? (
             <button
               onClick={clearAllFilters}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all font-semibold shadow-lg"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-semibold"
             >
               <RiRefreshLine className="h-5 w-5" />
-              Clear All Filters
+              Clear Filters
             </button>
           ) : (
             <button
               onClick={() => navigate("/user/submit")}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all font-semibold shadow-lg"
+              className="px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-semibold"
             >
               Submit Your First Complaint
             </button>
@@ -437,7 +502,7 @@ const MyComplaints = () => {
       ) : (
         <>
           {/* Results Count */}
-          <div className="mb-4 flex items-center justify-between">
+          <div className="mb-4">
             <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
               Showing{" "}
               <span className="font-bold text-indigo-600 dark:text-indigo-400">
@@ -455,6 +520,14 @@ const MyComplaints = () => {
           </div>
         </>
       )}
+
+      {/* ✅ FEEDBACK MODAL */}
+      <FeedbackModal
+        isOpen={feedbackModal.isOpen}
+        onClose={() => setFeedbackModal({ isOpen: false, complaint: null })}
+        complaint={feedbackModal.complaint}
+        onSubmit={handleFeedbackSubmit}
+      />
     </div>
   );
 };

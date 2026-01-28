@@ -715,119 +715,7 @@ app.post(
 );
 
 
-// Step 2: Verify OTP and Complete Registration
-// app.post("/api/auth/register/verify-otp", async (req, res) => {
-//   try {
-//     const { email, otp, name, password, roll, rollNo, phone } = req.body;
 
-//     // Validation
-//     if (!email || !otp || !name || !password) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Email, OTP, name, and password are required",
-//       });
-//     }
-
-//     const normalizedEmail = email.toLowerCase().trim();
-
-//     // Find valid OTP
-//     const otpDoc = await OTPs.findOne({
-//       email: normalizedEmail,
-//       otp: otp.trim(),
-//       verified: false,
-//       expiresAt: { $gt: new Date() },
-//     });
-
-//     if (!otpDoc) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Invalid or expired verification code. Please request a new one.",
-//       });
-//     }
-
-//     // Check if user already exists (double check)
-//     const existingUser = await Users.findOne({ email: normalizedEmail });
-//     if (existingUser) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Email already registered",
-//       });
-//     }
-
-//     // Hash password
-//     const hashedPassword = await bcrypt.hash(password, 10);
-
-//     // Determine role and roll number
-//     const userRoll = roll || rollNo || null;
-//     const userRole = userRoll ? "student" : "student"; // Default to student
-
-//     // Create user
-//     const now = new Date();
-//     const newUser = {
-//       name: name.trim(),
-//       email: normalizedEmail,
-//       password: hashedPassword,
-//       phone: phone?.trim() || null,
-//       roll: userRoll,
-//       role: userRole,
-//       emailVerified: true,
-//       createdAt: now,
-//       updatedAt: now,
-//     };
-
-//     const result = await Users.insertOne(newUser);
-//     const userId = result.insertedId.toString();
-
-//     console.log("✅ User registered with OTP:", normalizedEmail);
-
-//     // Mark OTP as verified
-//     await OTPs.updateOne(
-//       { _id: otpDoc._id },
-//       { $set: { verified: true } }
-//     );
-
-//     // Send welcome email (non-blocking)
-//     sendWelcomeEmail({ ...newUser, _id: result.insertedId }).catch((err) =>
-//       console.error("Welcome email failed:", err)
-//     );
-
-//     // Generate tokens
-//     const payload = { userId, email: normalizedEmail, role: userRole };
-
-//     const accessToken = jwt.sign(payload, process.env.JWT_SECRET, {
-//       expiresIn: process.env.JWT_EXPIRES_IN || "24h",
-//     });
-
-//     const refreshToken = jwt.sign(
-//       { ...payload, type: "refresh" },
-//       process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
-//       { expiresIn: "30d" }
-//     );
-
-//     res.status(201).json({
-//       success: true,
-//       message: "Registration successful! Welcome to CCMS.",
-//       token: accessToken,
-//       refreshToken: refreshToken,
-//       user: {
-//         id: userId,
-//         _id: userId,
-//         name: newUser.name,
-//         email: newUser.email,
-//         phone: newUser.phone,
-//         roll: newUser.roll,
-//         role: newUser.role,
-//       },
-//     });
-//   } catch (error) {
-//     console.error("❌ Verify OTP error:", error);
-//     res.status(500).json({
-//       success: false,
-//       message: "Registration failed. Please try again.",
-//       error: error.message,
-//     });
-//   }
-// });
 
 // Step 2: Verify OTP and Complete Registration
 app.post("/api/auth/register/verify-otp", async (req, res) => {
@@ -1003,79 +891,6 @@ app.post("/api/auth/register/verify-otp", async (req, res) => {
 });
 
 
-// Resend OTP
-// app.post("/api/auth/register/resend-otp", async (req, res) => {
-//   try {
-//     const { email, name } = req.body;
-
-//     if (!email) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Email is required",
-//       });
-//     }
-
-//     const normalizedEmail = email.toLowerCase().trim();
-
-//     // Check if user already exists
-//     const existingUser = await Users.findOne({ email: normalizedEmail });
-//     if (existingUser) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Email already registered",
-//       });
-//     }
-
-//     // Check rate limiting (prevent spam)
-//     const recentOTP = await OTPs.findOne({
-//       email: normalizedEmail,
-//       createdAt: { $gt: new Date(Date.now() - 60 * 1000) }, // Last 1 minute
-//     });
-
-//     if (recentOTP) {
-//       return res.status(429).json({
-//         success: false,
-//         message: "Please wait 1 minute before requesting another code",
-//       });
-//     }
-
-//     // Generate new OTP
-//     const otp = otpGenerator.generate(6, {
-//       digits: true,
-//       upperCaseAlphabets: false,
-//       lowerCaseAlphabets: false,
-//       specialChars: false,
-//     });
-
-//     console.log(`📧 Resent OTP for ${normalizedEmail}: ${otp}`);
-
-//     // Delete old OTPs and create new one
-//     await OTPs.deleteMany({ email: normalizedEmail });
-//     await OTPs.insertOne({
-//       email: normalizedEmail,
-//       otp: otp,
-//       name: name?.trim() || "User",
-//       verified: false,
-//       createdAt: new Date(),
-//       expiresAt: new Date(Date.now() + 10 * 60 * 1000),
-//     });
-
-//     // Send OTP email
-//     await sendOTPEmail(normalizedEmail, otp, name || "User");
-
-//     res.status(200).json({
-//       success: true,
-//       message: "New verification code sent",
-//       expiresIn: 600,
-//     });
-//   } catch (error) {
-//     console.error("❌ Resend OTP error:", error);
-//     res.status(500).json({
-//       success: false,
-//       message: "Failed to resend code",
-//     });
-//   }
-// });
 
 
 // Resend OTP
@@ -2382,63 +2197,314 @@ app.get(
   }
 );
 
-// ---------- ADMIN COMPLAINTS ----------
-app.put(
-  "/api/admin/complaints/:id/status",
-  auth,
-  requireRole("admin"),
-  async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { status, adminRemarks, assignedTo } = req.body;
+// ✅ NEW: Send Welcome Email Function
+async function sendWelcomeEmail(user) {
+  try {
+    const msg = {
+      to: user.email,
+      from: process.env.SENDGRID_FROM_EMAIL,
+      subject: '🎉 Welcome to CCMS - Registration Successful!',
+      html: getWelcomeEmailTemplate(user),
+    };
 
-      if (!ObjectId.isValid(id)) {
-        return res.status(400).json({ message: "Invalid ID" });
-      }
-
-      const updateFields = { updatedAt: new Date() };
-
-      if (status) {
-        updateFields.status = status;
-        const timelineEntry = {
-          status,
-          timestamp: new Date(),
-          message: `Status changed to ${status}`,
-        };
-
-        await Complaints.updateOne(
-          { _id: toObjectId(id) },
-          { $push: { timeline: timelineEntry } }
-        );
-      }
-
-      if (adminRemarks) updateFields.adminRemarks = adminRemarks;
-      if (assignedTo) updateFields.assignedTo = assignedTo;
-      if (status === "Resolved") updateFields.resolvedAt = new Date();
-
-      const result = await Complaints.updateOne(
-        { _id: toObjectId(id) },
-        { $set: updateFields }
-      );
-
-      if (!result.matchedCount) {
-        return res.status(404).json({ message: "Complaint not found" });
-      }
-
-      await AdminLogs.insertOne({
-        adminId: req.user.userId,
-        action: "UPDATE_STATUS",
-        complaintId: id,
-        details: { status, adminRemarks, assignedTo },
-        timestamp: new Date(),
-      });
-
-      res.json({ message: "Complaint status updated" });
-    } catch (e) {
-      res.status(500).json({ message: "Internal server error" });
-    }
+    await sgMail.send(msg);
+    console.log(`✅ Welcome email sent to ${user.email} via SendGrid`);
+  } catch (error) {
+    console.error('❌ Welcome email error:', error);
   }
-);
+}
+
+// ============================================
+// STATUS NOTIFICATION EMAIL TEMPLATES
+// ============================================
+
+// ✅ Resolved Email Template
+function getResolvedEmailTemplate(complaint, remarks) {
+  const complaintId = complaint.complaintId || complaint._id?.toString().slice(-8).toUpperCase() || 'N/A';
+  const subject = complaint.subject || complaint.title || 'Your Complaint';
+  const category = complaint.category || 'General';
+  const resolvedDate = new Date().toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin:0;padding:0;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background-color:#f0f2f5;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:linear-gradient(135deg,#10b981 0%,#059669 100%);padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:20px;box-shadow:0 20px 60px rgba(0,0,0,0.3);overflow:hidden;">
+          <!-- Header -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#10b981 0%,#059669 100%);padding:40px 30px;text-align:center;">
+              <div style="font-size:60px;margin-bottom:15px;">✅</div>
+              <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:700;">Complaint Resolved!</h1>
+              <p style="margin:10px 0 0 0;color:rgba(255,255,255,0.9);font-size:16px;">Your issue has been addressed</p>
+            </td>
+          </tr>
+          
+          <!-- Body -->
+          <tr>
+            <td style="padding:40px 30px;">
+              <p style="color:#4b5563;font-size:16px;line-height:1.6;margin:0 0 25px 0;">
+                We're pleased to inform you that your complaint has been <strong style="color:#059669;">successfully resolved</strong>.
+              </p>
+              
+              <!-- Complaint Details Box -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin:25px 0;">
+                <tr>
+                  <td style="background:#f0fdf4;border-radius:16px;padding:25px;border:2px solid #bbf7d0;">
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="padding:8px 0;border-bottom:1px solid #dcfce7;">
+                          <span style="color:#6b7280;font-size:13px;text-transform:uppercase;letter-spacing:1px;">Complaint ID</span><br>
+                          <span style="color:#1f2937;font-size:16px;font-weight:600;">${complaintId}</span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:12px 0;border-bottom:1px solid #dcfce7;">
+                          <span style="color:#6b7280;font-size:13px;text-transform:uppercase;letter-spacing:1px;">Subject</span><br>
+                          <span style="color:#1f2937;font-size:16px;font-weight:600;">${subject}</span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:12px 0;border-bottom:1px solid #dcfce7;">
+                          <span style="color:#6b7280;font-size:13px;text-transform:uppercase;letter-spacing:1px;">Category</span><br>
+                          <span style="color:#1f2937;font-size:16px;font-weight:600;">${category}</span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:12px 0;">
+                          <span style="color:#6b7280;font-size:13px;text-transform:uppercase;letter-spacing:1px;">Resolved On</span><br>
+                          <span style="color:#059669;font-size:16px;font-weight:600;">${resolvedDate}</span>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+              
+              ${remarks ? `
+              <!-- Resolution Remarks -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin:25px 0;">
+                <tr>
+                  <td style="background:#f9fafb;border-left:4px solid #10b981;padding:20px;border-radius:0 12px 12px 0;">
+                    <p style="margin:0 0 8px 0;font-size:13px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;font-weight:600;">Resolution Remarks</p>
+                    <p style="margin:0;font-size:15px;color:#1f2937;line-height:1.6;">${remarks}</p>
+                  </td>
+                </tr>
+              </table>
+              ` : ''}
+              
+              <!-- Feedback CTA -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin:30px 0;">
+                <tr>
+                  <td style="background:linear-gradient(135deg,#eff6ff 0%,#dbeafe 100%);border-radius:16px;padding:25px;text-align:center;border:1px solid #bfdbfe;">
+                    <p style="margin:0 0 15px 0;font-size:16px;color:#1e40af;font-weight:600;">📝 We Value Your Feedback!</p>
+                    <p style="margin:0 0 20px 0;font-size:14px;color:#3b82f6;">Please log in to CCMS to rate your experience and help us improve.</p>
+                    <a href="https://user-dash-test.vercel.app/my-complaints" style="display:inline-block;background:linear-gradient(135deg,#3b82f6 0%,#2563eb 100%);color:#ffffff;text-decoration:none;padding:12px 30px;border-radius:25px;font-weight:600;font-size:14px;">Give Feedback</a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Footer -->
+          <tr>
+            <td style="background:#f9fafb;padding:25px 30px;text-align:center;border-top:1px solid #e5e7eb;">
+              <p style="margin:0 0 10px 0;color:#6b7280;font-size:13px;">
+                Thank you for using the Campus Complaint Management System.
+              </p>
+              <p style="margin:0;color:#9ca3af;font-size:12px;">
+                © 2025 CCMS - University of Lucknow
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+// ✅ Rejected Email Template
+function getRejectedEmailTemplate(complaint, reason) {
+  const complaintId = complaint.complaintId || complaint._id?.toString().slice(-8).toUpperCase() || 'N/A';
+  const subject = complaint.subject || complaint.title || 'Your Complaint';
+  const category = complaint.category || 'General';
+  const rejectedDate = new Date().toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin:0;padding:0;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background-color:#f0f2f5;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:linear-gradient(135deg,#f59e0b 0%,#d97706 100%);padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:20px;box-shadow:0 20px 60px rgba(0,0,0,0.3);overflow:hidden;">
+          <!-- Header -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#f59e0b 0%,#d97706 100%);padding:40px 30px;text-align:center;">
+              <div style="font-size:60px;margin-bottom:15px;">📋</div>
+              <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:700;">Complaint Update</h1>
+              <p style="margin:10px 0 0 0;color:rgba(255,255,255,0.9);font-size:16px;">Your complaint could not be processed</p>
+            </td>
+          </tr>
+          
+          <!-- Body -->
+          <tr>
+            <td style="padding:40px 30px;">
+              <p style="color:#4b5563;font-size:16px;line-height:1.6;margin:0 0 25px 0;">
+                We regret to inform you that your complaint could not be processed at this time.
+              </p>
+              
+              <!-- Complaint Details Box -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin:25px 0;">
+                <tr>
+                  <td style="background:#fffbeb;border-radius:16px;padding:25px;border:2px solid #fde68a;">
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="padding:8px 0;border-bottom:1px solid #fef3c7;">
+                          <span style="color:#6b7280;font-size:13px;text-transform:uppercase;letter-spacing:1px;">Complaint ID</span><br>
+                          <span style="color:#1f2937;font-size:16px;font-weight:600;">${complaintId}</span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:12px 0;border-bottom:1px solid #fef3c7;">
+                          <span style="color:#6b7280;font-size:13px;text-transform:uppercase;letter-spacing:1px;">Subject</span><br>
+                          <span style="color:#1f2937;font-size:16px;font-weight:600;">${subject}</span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:12px 0;border-bottom:1px solid #fef3c7;">
+                          <span style="color:#6b7280;font-size:13px;text-transform:uppercase;letter-spacing:1px;">Category</span><br>
+                          <span style="color:#1f2937;font-size:16px;font-weight:600;">${category}</span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:12px 0;">
+                          <span style="color:#6b7280;font-size:13px;text-transform:uppercase;letter-spacing:1px;">Status Updated On</span><br>
+                          <span style="color:#d97706;font-size:16px;font-weight:600;">${rejectedDate}</span>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+              
+              <!-- Rejection Reason -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin:25px 0;">
+                <tr>
+                  <td style="background:#fef2f2;border-left:4px solid #ef4444;padding:20px;border-radius:0 12px 12px 0;">
+                    <p style="margin:0 0 8px 0;font-size:13px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;font-weight:600;">Reason</p>
+                    <p style="margin:0;font-size:15px;color:#1f2937;line-height:1.6;">${reason || 'The complaint does not fall within the scope of actionable issues, or additional information is required.'}</p>
+                  </td>
+                </tr>
+              </table>
+              
+              <!-- Next Steps -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin:25px 0;">
+                <tr>
+                  <td style="background:#f9fafb;border-radius:12px;padding:20px;">
+                    <p style="margin:0 0 12px 0;font-size:14px;color:#1f2937;font-weight:600;">📌 What can you do?</p>
+                    <ul style="margin:0;padding-left:20px;color:#4b5563;font-size:14px;line-height:1.8;">
+                      <li>Review the reason provided above</li>
+                      <li>If you have additional information, file a new complaint with more details</li>
+                      <li>Contact the administration if you believe this is an error</li>
+                    </ul>
+                  </td>
+                </tr>
+              </table>
+              
+              <!-- Contact Info -->
+              <p style="color:#6b7280;font-size:14px;text-align:center;margin:25px 0 0 0;">
+                Questions? Log in to CCMS or contact your department office.
+              </p>
+            </td>
+          </tr>
+          
+          <!-- Footer -->
+          <tr>
+            <td style="background:#f9fafb;padding:25px 30px;text-align:center;border-top:1px solid #e5e7eb;">
+              <p style="margin:0 0 10px 0;color:#6b7280;font-size:13px;">
+                We appreciate your patience and understanding.
+              </p>
+              <p style="margin:0;color:#9ca3af;font-size:12px;">
+                © 2025 CCMS - University of Lucknow
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+// ✅ Send Status Notification Email Function
+async function sendStatusEmail(complaint, newStatus, remarks) {
+  try {
+    // Don't send email if no email address
+    if (!complaint.email) {
+      console.log(`⚠️ No email for complaint ${complaint.complaintId} - skipping notification`);
+      return { success: false, reason: 'no_email' };
+    }
+
+    // Only send for final statuses
+    if (newStatus !== 'Resolved' && newStatus !== 'Rejected') {
+      console.log(`ℹ️ Status "${newStatus}" doesn't trigger email`);
+      return { success: false, reason: 'status_not_final' };
+    }
+
+    // Check if email was already sent for this status
+    if (complaint.statusEmailSentAt && complaint.status === newStatus) {
+      console.log(`⚠️ Email already sent for ${complaint.complaintId} with status ${newStatus}`);
+      return { success: false, reason: 'already_sent' };
+    }
+
+    const isResolved = newStatus === 'Resolved';
+    
+    const msg = {
+      to: complaint.email,
+      from: process.env.SENDGRID_FROM_EMAIL,
+      subject: isResolved 
+        ? `✅ Complaint Resolved - ${complaint.complaintId || 'CCMS'}`
+        : `📋 Complaint Update - ${complaint.complaintId || 'CCMS'}`,
+      html: isResolved 
+        ? getResolvedEmailTemplate(complaint, remarks)
+        : getRejectedEmailTemplate(complaint, remarks),
+    };
+
+    await sgMail.send(msg);
+    
+    console.log(`✅ Status email (${newStatus}) sent to ${complaint.email} for ${complaint.complaintId}`);
+    
+    return { success: true, email: complaint.email, status: newStatus };
+  } catch (error) {
+    console.error(`❌ Status email error for ${complaint.complaintId}:`, error.message);
+    // Don't throw - email failure shouldn't break the status update
+    return { success: false, error: error.message };
+  }
+}
 
 app.put(
   "/api/admin/complaints/:id/assign",
@@ -2577,6 +2643,122 @@ app.get(
     }
   }
 );
+// ============================================
+// ADMIN STATUS UPDATE WITH EMAIL NOTIFICATION
+// ============================================
+app.put(
+  "/api/admin/complaints/:id/status",
+  auth,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status, adminRemarks, assignedTo } = req.body;
+
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).json({ message: "Invalid ID" });
+      }
+
+      // Get complaint BEFORE update (for email)
+      const complaint = await Complaints.findOne({ _id: toObjectId(id) });
+      if (!complaint) {
+        return res.status(404).json({ message: "Complaint not found" });
+      }
+
+      const previousStatus = complaint.status;
+      const now = new Date();
+      const updateFields = { updatedAt: now };
+
+      if (status) {
+        updateFields.status = status;
+        const timelineEntry = {
+          status,
+          timestamp: now,
+          message: `Status changed to ${status}`,
+          by: req.user.userId,
+        };
+
+        await Complaints.updateOne(
+          { _id: toObjectId(id) },
+          { $push: { timeline: timelineEntry } }
+        );
+      }
+
+      if (adminRemarks) updateFields.adminRemarks = adminRemarks;
+      if (assignedTo) updateFields.assignedTo = assignedTo;
+      
+      if (status === "Resolved") {
+        updateFields.resolvedAt = now;
+      }
+      
+      if (status === "Rejected") {
+        updateFields.rejectedAt = now;
+      }
+
+      const result = await Complaints.updateOne(
+        { _id: toObjectId(id) },
+        { $set: updateFields }
+      );
+
+      if (!result.matchedCount) {
+        return res.status(404).json({ message: "Complaint not found" });
+      }
+
+      // LOG ADMIN ACTION
+      await AdminLogs.insertOne({
+        adminId: req.user.userId,
+        action: "UPDATE_STATUS",
+        complaintId: id,
+        details: { 
+          previousStatus,
+          newStatus: status, 
+          adminRemarks, 
+          assignedTo 
+        },
+        timestamp: now,
+      });
+
+      // ✅ SEND EMAIL NOTIFICATION (async - don't wait)
+      if (status === "Resolved" || status === "Rejected") {
+        if (previousStatus !== status) {
+          const updatedComplaint = await Complaints.findOne({ _id: toObjectId(id) });
+          
+          // Send email in background (non-blocking)
+          sendStatusEmail(updatedComplaint, status, adminRemarks)
+            .then((emailResult) => {
+              if (emailResult.success) {
+                Complaints.updateOne(
+                  { _id: toObjectId(id) },
+                  { 
+                    $set: { 
+                      statusEmailSentAt: new Date(),
+                      statusEmailSentFor: status 
+                    } 
+                  }
+                ).catch(err => console.error('Failed to update email sent flag:', err));
+              }
+              console.log(`📧 Email result for ${updatedComplaint.complaintId}:`, emailResult);
+            })
+            .catch((err) => {
+              console.error(`❌ Failed to send status email:`, err);
+            });
+          
+          console.log(`📧 Status email queued for ${complaint.complaintId} (${status})`);
+        }
+      }
+
+      res.json({ 
+        success: true,
+        message: "Complaint status updated",
+        emailQueued: (status === "Resolved" || status === "Rejected") && previousStatus !== status
+      });
+    } catch (e) {
+      console.error("Status update error:", e);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  }
+);
+
 app.patch(
   "/api/complaints/admin/:id/read",
   auth,
@@ -3718,6 +3900,230 @@ app.get("/api/staff/stats/overview", auth, requireRole("admin"), async (req, res
   } catch (error) {
     console.error("Error fetching staff stats:", error);
     res.status(500).json({ message: "Failed to fetch staff stats" });
+  }
+});
+// ============================================
+// STUDENT FEEDBACK ENDPOINTS
+// ============================================
+
+// POST: Submit feedback for resolved complaint
+app.post("/api/complaints/:id/feedback", auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rating, comment } = req.body;
+
+    // Validate complaint ID
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Invalid complaint ID" 
+      });
+    }
+
+    // Validate rating
+    if (!rating || rating < 1 || rating > 5) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Rating must be between 1 and 5" 
+      });
+    }
+
+    // Find the complaint
+    const complaint = await Complaints.findOne({ _id: toObjectId(id) });
+    
+    if (!complaint) {
+      return res.status(404).json({ 
+        success: false,
+        message: "Complaint not found" 
+      });
+    }
+
+    // Check ownership (student can only give feedback on their own complaints)
+    if (complaint.userId !== req.user.userId) {
+      return res.status(403).json({ 
+        success: false,
+        message: "You can only give feedback on your own complaints" 
+      });
+    }
+
+    // Check if complaint is resolved
+    if (complaint.status !== "Resolved") {
+      return res.status(400).json({ 
+        success: false,
+        message: "Feedback can only be given for resolved complaints" 
+      });
+    }
+
+    // Check if feedback already submitted
+    if (complaint.feedback && complaint.feedback.rating) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Feedback has already been submitted for this complaint" 
+      });
+    }
+
+    const now = new Date();
+    
+    // Save feedback
+    const feedbackData = {
+      rating: parseInt(rating),
+      comment: comment?.trim().substring(0, 500) || null, // Limit to 500 chars
+      submittedAt: now,
+      submittedBy: req.user.userId,
+    };
+
+    await Complaints.updateOne(
+      { _id: toObjectId(id) },
+      { 
+        $set: { 
+          feedback: feedbackData,
+          updatedAt: now
+        },
+        $push: {
+          timeline: {
+            status: "Feedback Received",
+            timestamp: now,
+            message: `Student rated ${rating}/5 stars`,
+          }
+        }
+      }
+    );
+
+    console.log(`✅ Feedback received for ${complaint.complaintId}: ${rating}/5 stars`);
+
+    res.json({ 
+      success: true,
+      message: "Thank you for your feedback!",
+      feedback: feedbackData
+    });
+
+  } catch (error) {
+    console.error("Feedback submission error:", error);
+    res.status(500).json({ 
+      success: false,
+      message: "Failed to submit feedback" 
+    });
+  }
+});
+
+// GET: Check if feedback exists for a complaint
+app.get("/api/complaints/:id/feedback", auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Invalid complaint ID" 
+      });
+    }
+
+    const complaint = await Complaints.findOne(
+      { _id: toObjectId(id) },
+      { projection: { feedback: 1, status: 1, userId: 1 } }
+    );
+
+    if (!complaint) {
+      return res.status(404).json({ 
+        success: false,
+        message: "Complaint not found" 
+      });
+    }
+
+    // Check ownership for students, admins can view any
+    if (req.user.role !== "admin" && complaint.userId !== req.user.userId) {
+      return res.status(403).json({ 
+        success: false,
+        message: "Access denied" 
+      });
+    }
+
+    res.json({ 
+      success: true,
+      hasFeedback: !!(complaint.feedback && complaint.feedback.rating),
+      feedback: complaint.feedback || null,
+      canGiveFeedback: complaint.status === "Resolved" && !complaint.feedback?.rating
+    });
+
+  } catch (error) {
+    console.error("Get feedback error:", error);
+    res.status(500).json({ 
+      success: false,
+      message: "Failed to get feedback" 
+    });
+  }
+});
+
+// GET: Feedback statistics (Admin only)
+app.get("/api/admin/feedback/stats", auth, requireRole("admin"), async (req, res) => {
+  try {
+    // Get current admin for filtering
+    const currentAdmin = await Users.findOne({ _id: toObjectId(req.user.userId) });
+    const adminType = currentAdmin?.adminType || "super";
+
+    // Build query based on admin type
+    let query = { "feedback.rating": { $exists: true } };
+    
+    if (adminType === "department" && currentAdmin.department) {
+      query.department = currentAdmin.department;
+    }
+
+    // Aggregate feedback stats
+    const stats = await Complaints.aggregate([
+      { $match: query },
+      {
+        $group: {
+          _id: null,
+          totalFeedbacks: { $sum: 1 },
+          averageRating: { $avg: "$feedback.rating" },
+          rating5: { $sum: { $cond: [{ $eq: ["$feedback.rating", 5] }, 1, 0] } },
+          rating4: { $sum: { $cond: [{ $eq: ["$feedback.rating", 4] }, 1, 0] } },
+          rating3: { $sum: { $cond: [{ $eq: ["$feedback.rating", 3] }, 1, 0] } },
+          rating2: { $sum: { $cond: [{ $eq: ["$feedback.rating", 2] }, 1, 0] } },
+          rating1: { $sum: { $cond: [{ $eq: ["$feedback.rating", 1] }, 1, 0] } },
+        }
+      }
+    ]).toArray();
+
+    // Get recent feedbacks
+    const recentFeedbacks = await Complaints.find(query)
+      .sort({ "feedback.submittedAt": -1 })
+      .limit(10)
+      .project({
+        complaintId: 1,
+        subject: 1,
+        title: 1,
+        category: 1,
+        feedback: 1,
+        resolvedAt: 1,
+      })
+      .toArray();
+
+    const result = stats[0] || {
+      totalFeedbacks: 0,
+      averageRating: 0,
+      rating5: 0,
+      rating4: 0,
+      rating3: 0,
+      rating2: 0,
+      rating1: 0,
+    };
+
+    res.json({
+      success: true,
+      stats: {
+        ...result,
+        averageRating: result.averageRating ? parseFloat(result.averageRating.toFixed(2)) : 0,
+      },
+      recentFeedbacks,
+    });
+
+  } catch (error) {
+    console.error("Feedback stats error:", error);
+    res.status(500).json({ 
+      success: false,
+      message: "Failed to get feedback stats" 
+    });
   }
 });
 

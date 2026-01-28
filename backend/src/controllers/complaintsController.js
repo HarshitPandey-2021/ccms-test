@@ -603,6 +603,95 @@ async function getAnalyticsData(req, res) {
 }
 
 
+// ✅ Submit Feedback for Resolved Complaint
+const submitFeedback = async (req, res) => {
+  try {
+    const { rating, satisfaction, feedback } = req.body;
+    const complaintId = req.params.id;
+    const userId = req.user.userId;
+
+    console.log(`⭐ Feedback submission attempt for complaint: ${complaintId}`);
+
+    // Find the complaint
+    const complaint = await db.collection("Complaints").findOne({
+      _id: new ObjectId(complaintId)
+    });
+
+    if (!complaint) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Complaint not found" 
+      });
+    }
+
+    // Check if user owns this complaint
+    if (complaint.filedBy.toString() !== userId) {
+      return res.status(403).json({ 
+        success: false, 
+        message: "You can only give feedback on your own complaints" 
+      });
+    }
+
+    // Check if complaint is resolved
+    if (complaint.status !== "Resolved") {
+      return res.status(400).json({ 
+        success: false, 
+        message: "You can only give feedback for resolved complaints" 
+      });
+    }
+
+    // Check if feedback already submitted
+    if (complaint.feedback && complaint.feedback.rating) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "You have already submitted feedback for this complaint" 
+      });
+    }
+
+    // Validate rating
+    if (!rating || rating < 1 || rating > 5) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Please provide a valid rating (1-5 stars)" 
+      });
+    }
+
+    // Create feedback object
+    const feedbackData = {
+      rating: parseInt(rating),
+      satisfaction: satisfaction || null, // 1=Poor, 2=Okay, 3=Great
+      comment: feedback?.trim() || "",
+      submittedAt: new Date()
+    };
+
+    // Update complaint with feedback
+    await db.collection("Complaints").updateOne(
+      { _id: new ObjectId(complaintId) },
+      { 
+        $set: { 
+          feedback: feedbackData,
+          updatedAt: new Date()
+        } 
+      }
+    );
+
+    console.log(`⭐ Feedback received for ${complaint.complaintId}: ${rating} stars`);
+
+    res.json({
+      success: true,
+      message: "Thank you for your feedback!",
+      feedback: feedbackData
+    });
+
+  } catch (error) {
+    console.error("❌ Feedback submission error:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to submit feedback" 
+    });
+  }
+};
+
 // At the BOTTOM of complaintsController.js, BEFORE module.exports
 
 // ==================== PUBLIC STATS FOR LANDING PAGE ====================
@@ -699,4 +788,5 @@ module.exports = {
   markComplaintAsRead,
   getLandingStats,  // ✅ MAKE SURE THIS IS HERE!
     getUnreadComplaints,  // ✅ ADD THIS!
+     submitFeedback,  // ✅ ADD THIS
 };

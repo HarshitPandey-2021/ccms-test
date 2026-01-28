@@ -273,6 +273,8 @@ export async function viewPdf(url) {
   }
 }
 
+
+
 export async function downloadPdf(url, filename = "document.pdf") {
   if (!url) throw new Error("No PDF URL provided");
   try {
@@ -300,6 +302,34 @@ export async function downloadPdf(url, filename = "document.pdf") {
   }
 }
 
+
+
+export async function submitFeedback(complaintId, feedbackData) {
+  try {
+    let token = localStorage.getItem("token");
+    if (isTokenExpired(token)) {
+      token = await refreshAccessToken();
+      if (!token) throw new Error("Authentication failed");
+    }
+
+    const res = await fetch(`${API_BASE}/complaints/${complaintId}/feedback`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(feedbackData),
+    });
+
+    return handleResponse(res);
+  } catch (error) {
+    throw error;
+  }
+}
+
+
+
+
 const api = {
   login,
   register,
@@ -316,6 +346,10 @@ const api = {
   getViewablePdfUrl,
   viewPdf,
   downloadPdf,
+  submitFeedback, 
+
+  
+
 };
 
 export default api;

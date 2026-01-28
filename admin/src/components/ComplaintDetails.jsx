@@ -3,6 +3,10 @@ import ReactDOM from "react-dom";
 import {
   RiCloseLine,
   RiPlayFill,
+  
+    RiStarFill,
+  RiStarLine,
+  RiCalendarLine,
   RiCloseFill,
   RiMapPinLine,
   RiUserLine,
@@ -796,7 +800,102 @@ const getActionButtons = () => {
                 </p>
               </div>
             )}
+
           </div>
+
+          {/* ✅ STUDENT FEEDBACK SECTION - Add this after Admin Remarks section */}
+{complaint.feedback?.rating && (
+  <div>
+    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+      <RiStarFill className="h-5 w-5 text-yellow-500" />
+      Student Feedback
+    </label>
+    
+    <div className="bg-gradient-to-r from-amber-50 to-yellow-50 dark:from-amber-900/20 dark:to-yellow-900/20 rounded-xl p-5 border-2 border-amber-200 dark:border-amber-800 space-y-4">
+      
+      {/* Star Rating */}
+      <div className="flex items-center gap-4 pb-3 border-b border-amber-200 dark:border-amber-700">
+        <span className="text-sm font-medium text-gray-600 dark:text-gray-400 min-w-[80px]">
+          Rating:
+        </span>
+        <div className="flex gap-1">
+          {[1, 2, 3, 4, 5].map((star) =>
+            star <= complaint.feedback.rating ? (
+              <RiStarFill key={star} className="w-6 h-6 text-yellow-400" />
+            ) : (
+              <RiStarLine key={star} className="w-6 h-6 text-gray-300 dark:text-gray-600" />
+            )
+          )}
+        </div>
+        <span className="ml-2 text-sm font-bold text-gray-700 dark:text-gray-300 bg-yellow-100 dark:bg-yellow-900/30 px-3 py-1 rounded-lg">
+          {complaint.feedback.rating}/5 Stars
+        </span>
+      </div>
+
+      {/* Satisfaction Level */}
+      {complaint.feedback.satisfaction && (
+        <div className="flex items-center gap-4 pb-3 border-b border-amber-200 dark:border-amber-700">
+          <span className="text-sm font-medium text-gray-600 dark:text-gray-400 min-w-[80px]">
+            Satisfaction:
+          </span>
+          <span className={`px-4 py-2 rounded-full text-sm font-bold flex items-center gap-2 ${
+            complaint.feedback.satisfaction === 1 
+              ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" 
+              : complaint.feedback.satisfaction === 2 
+                ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
+                : "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+          }`}>
+            {complaint.feedback.satisfaction === 1 && "😕 Poor"}
+            {complaint.feedback.satisfaction === 2 && "😐 Okay"}
+            {complaint.feedback.satisfaction === 3 && "😊 Great"}
+          </span>
+        </div>
+      )}
+
+      {/* ✅ STUDENT COMMENT - This was missing! */}
+      {complaint.feedback.comment && complaint.feedback.comment.trim() !== "" && (
+        <div>
+          <span className="text-sm font-semibold text-gray-700 dark:text-gray-300 block mb-2 flex items-center gap-2">
+            <RiFileTextLine className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            Student's Comment:
+          </span>
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border-2 border-amber-200 dark:border-amber-700">
+            <p className="text-gray-800 dark:text-gray-200 text-sm leading-relaxed italic">
+              "{complaint.feedback.comment}"
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* No Comment Message */}
+      {(!complaint.feedback.comment || complaint.feedback.comment.trim() === "") && (
+        <div className="text-center py-2">
+          <p className="text-sm text-gray-500 dark:text-gray-400 italic">
+            No written feedback provided
+          </p>
+        </div>
+      )}
+
+      {/* Submitted Time */}
+      {complaint.feedback.submittedAt && (
+        <div className="pt-3 border-t border-amber-200 dark:border-amber-700">
+          <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">
+            <RiCalendarLine className="h-3.5 w-3.5" />
+            <span className="font-medium">Feedback submitted:</span>
+            {new Date(complaint.feedback.submittedAt).toLocaleString('en-US', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: true
+            })}
+          </p>
+        </div>
+      )}
+    </div>
+  </div>
+)}
 
 {/* FOOTER */}
 <div className="flex-shrink-0 bg-gray-50 dark:bg-gray-900 border-t px-6 py-4 rounded-b-2xl">
