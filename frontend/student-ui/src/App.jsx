@@ -1,45 +1,60 @@
-// frontend/student-ui/src/App.jsx
-import { Routes, Route, Navigate } from "react-router-dom";
-import LandingPage from "./pages/LandingPage.jsx";
-import LoginPage from "./pages/LoginPage.jsx";
-import SignupPage from "./pages/SignupPage.jsx";
-import { AuthProvider } from "./context/AuthContext.jsx";
-
-function App() {
-  return (
-    <AuthProvider>
-      <Routes>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/signup" element={<SignupPage />} />
-        {/* Add logout handler */}
-        <Route path="/logout" element={<LogoutHandler />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </AuthProvider>
-  );
-}
-
-// Add this logout handler component
+import React, { useState, useEffect } from 'react';
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import LandingPage from './pages/LandingPage.jsx';
+import LoginPage from './pages/LoginPage.jsx';
+import SignupPage from './pages/SignupPage.jsx';
+import HowItWorks from './pages/HowItWorks.jsx';    // Simple overview page
+import JourneyPage from './pages/JourneyPage.jsx';  // Immersive journey page
+import { AuthProvider } from './context/AuthContext.jsx';
+import { DarkModeProvider } from './context/DarkModeContext.jsx';
+import Loader from './components/Loader.jsx';
 function LogoutHandler() {
-  // Clear any remaining auth data and redirect to home
-  React.useEffect(() => {
-    // Clear all possible auth data
+  useEffect(() => {
     localStorage.clear();
     sessionStorage.clear();
-    
-    // Redirect to landing page
     window.location.href = '/';
   }, []);
 
+  return <Loader message="Logging out..." />;
+}
+
+function AppContent() {
+  const [loading, setLoading] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Show loader on route change
+  useEffect(() => {
+    setLoading(true);
+    const timer = setTimeout(() => setLoading(false), 800);
+    return () => clearTimeout(timer);
+  }, [location.pathname]);
+
+  if (loading) {
+    return <Loader message="Loading page..." />;
+  }
+
   return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="text-center">
-        <h2 className="text-xl font-semibold mb-4">Logging out...</h2>
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-      </div>
-    </div>
+<Routes>
+  <Route path="/" element={<LandingPage />} />
+  <Route path="/how-it-works" element={<HowItWorks />} />
+  <Route path="/journey" element={<JourneyPage />} />
+  <Route path="/login" element={<LoginPage />} />
+  <Route path="/signup" element={<SignupPage />} />
+  <Route path="/logout" element={<LogoutHandler />} />
+  <Route path="*" element={<Navigate to="/" replace />} />
+</Routes>
   );
 }
 
-export default App;
+function App() {
+  return (
+    <DarkModeProvider>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </DarkModeProvider>
+  );
+}
+
+export default App; 

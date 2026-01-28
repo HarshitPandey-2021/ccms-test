@@ -1,41 +1,43 @@
-// src/pages/SignupPage.jsx - COMPLETE WITH ALL FIXES
-
+// src/pages/SignupPage.jsx
 import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { UserPlus, Mail, Lock, Phone, Hash, AlertCircle, CheckCircle, Eye, EyeOff, Loader2, ArrowLeft, RefreshCw } from "lucide-react";
 import { requestRegistrationOTP, verifyOTPAndRegister, resendOTP } from "../api.js";
+import { useDarkMode } from "../context/DarkModeContext";
+import Navbar from "../components/common/Navbar";
+import Footer from "../components/common/Footer.jsx";
 
-// Helper function for personalized greeting
 const getStudentGreeting = (rollNo, studentName, batch) => {
   const year = rollNo.substring(0, 2);
-  const endYear = batch.split('-')[1];
-  const firstName = studentName.split(' ')[0];
-  
-  let batchType = '';
-  let emoji = '';
-  
-  if (year === '22') {
-    batchType = 'senior';
-    emoji = '📚';
-  } else if (year === '23') {
-    batchType = '';
-    emoji = '🎓';
-  } else if (year === '24') {
-    batchType = 'lateral entry';
-    emoji = '🚀';
+  const endYear = batch.split("-")[1];
+  const firstName = studentName.split(" ")[0];
+
+  let batchType = "";
+  let emoji = "";
+
+  if (year === "22") {
+    batchType = "senior";
+    emoji = "📚";
+  } else if (year === "23") {
+    batchType = "";
+    emoji = "🎓";
+  } else if (year === "24") {
+    batchType = "lateral entry";
+    emoji = "🚀";
   }
-  
-  const greeting = batchType 
+
+  const greeting = batchType
     ? `Let me guess... You're ${firstName}, ${batchType} student from B.Tech AI ${endYear} batch? ${emoji}`
     : `Let me guess... You're ${firstName} from B.Tech AI ${endYear} batch? ${emoji}`;
-    
+
   return greeting;
 };
 
 export default function SignupPage() {
   const navigate = useNavigate();
-  
+  const { isDark } = useDarkMode();
+
   const [step, setStep] = useState(1);
-  
   const [form, setForm] = useState({
     roll: "",
     email: "",
@@ -43,18 +45,19 @@ export default function SignupPage() {
     confirmPassword: "",
     phone: "",
   });
-  
+
   const [studentInfo, setStudentInfo] = useState(null);
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const otpRefs = useRef([]);
-  
+
   const [error, setError] = useState("");
   const [errorDetails, setErrorDetails] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
   const [resendTimer, setResendTimer] = useState(0);
-  
-  // Countdown effect
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   useEffect(() => {
     let interval;
     if (resendTimer > 0) {
@@ -74,7 +77,7 @@ export default function SignupPage() {
 
   function handleOtpChange(index, value) {
     if (value && !/^\d$/.test(value)) return;
-    
+
     const newOtp = [...otp];
     newOtp[index] = value;
     setOtp(newOtp);
@@ -121,40 +124,29 @@ export default function SignupPage() {
       return setError("Passwords do not match");
     }
     if (!isStrongPassword(form.password)) {
-      return setError(
-        "Password must be at least 8 characters with a number and uppercase letter"
-      );
+      return setError("Password must be at least 8 characters with a number and uppercase letter");
     }
 
     setLoading(true);
     try {
-      const response = await requestRegistrationOTP(
-        form.email.trim(), 
-        "",
-        form.roll.trim()
-      );
-      
+      const response = await requestRegistrationOTP(form.email.trim(), "", form.roll.trim());
+
       setStudentInfo({
         name: response.studentName,
         greeting: response.greeting,
         subtitle: response.subtitle,
         batch: response.batch,
       });
-      
-      // ✅ Show personalized greeting
-      const customGreeting = getStudentGreeting(
-        form.roll.trim(), 
-        response.studentName, 
-        response.batch
-      );
-      
+
+      const customGreeting = getStudentGreeting(form.roll.trim(), response.studentName, response.batch);
+
       setSuccess(customGreeting);
       setStep(2);
       setResendTimer(60);
     } catch (err) {
       setError(err.message || "Failed to verify roll number");
       setErrorDetails(err.details || "");
-      
+
       if (err.errorType === "ALREADY_REGISTERED" && err.registeredEmail) {
         setErrorDetails(`${err.details}\n${err.registeredEmail}`);
       }
@@ -189,21 +181,20 @@ export default function SignupPage() {
       localStorage.setItem("user", JSON.stringify(response.user));
 
       setSuccess(response.message || "Account created successfully! 🎉");
-      
+
       setTimeout(() => {
         const USER_APP_URL = import.meta.env.VITE_STUDENT_URL || "http://localhost:3001";
-        
+
         const payload = {
           token: response.token,
           refreshToken: response.refreshToken || null,
           user: response.user,
           timestamp: Date.now(),
         };
-        
+
         const encoded = encodeURIComponent(JSON.stringify(payload));
         window.location.href = `${USER_APP_URL}/?auth=${encoded}`;
       }, 2000);
-      
     } catch (err) {
       setError(err.message || "Invalid verification code");
       setOtp(["", "", "", "", "", ""]);
@@ -215,7 +206,7 @@ export default function SignupPage() {
 
   async function handleResendOTP() {
     if (resendTimer > 0) return;
-    
+
     setError("");
     setErrorDetails("");
     setLoading(true);
@@ -245,308 +236,357 @@ export default function SignupPage() {
   }
 
   return (
-    <div
-      className="min-h-screen flex items-center justify-center px-4 py-8"
-      style={{
-        background:
-          "linear-gradient(135deg, rgba(192,38,211,0.15), rgba(14,165,233,0.12), rgba(0,128,128,0.10))",
-      }}
-    >
-      <div
-        className="p-8 rounded-2xl shadow-xl w-full max-w-md backdrop-blur-md"
-        style={{
-          background:
-            "linear-gradient(180deg, rgba(255,255,255,0.85), rgba(255,255,255,0.75))",
-        }}
-      >
-        {/* Header */}
-        <h2
-          className="text-3xl font-bold text-center mb-2"
-          style={{
-            background: "linear-gradient(90deg,#c026d3,#0ea5e9,#008080)",
-            WebkitBackgroundClip: "text",
-            color: "transparent",
-          }}
-        >
-          {step === 1 ? "Student Registration" : "Verify Email"}
-        </h2>
-        
-        {step === 1 && (
-          <p className="text-center text-gray-600 text-sm mb-4">
-            For University of Lucknow students only
-          </p>
-        )}
-        
-        {step === 2 && studentInfo && (
-          <div className="text-center mb-4">
-            <p className="text-lg font-semibold text-gray-800">
-              {studentInfo.greeting}
-            </p>
-            <p className="text-sm text-gray-600">
-              {studentInfo.subtitle}
-            </p>
-            <p className="text-xs text-gray-500 mt-1">
-              Code sent to <strong>{form.email}</strong>
-            </p>
-          </div>
-        )}
+    <>
+      <Navbar />
+      <div className={`min-h-screen flex items-center justify-center px-4 py-8 pt-20 ${isDark ? 'bg-gray-900' : 'bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50'}`}>
+        {/* Background Effects */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className={`absolute top-1/4 left-1/4 w-96 h-96 ${isDark ? 'bg-indigo-600/10' : 'bg-indigo-200/30'} rounded-full blur-3xl`} />
+          <div className={`absolute bottom-1/4 right-1/4 w-96 h-96 ${isDark ? 'bg-purple-600/10' : 'bg-purple-200/30'} rounded-full blur-3xl`} />
+        </div>
 
-        {/* Error Message */}
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg mb-4 text-sm">
-            <p className="font-medium">{error}</p>
-            {errorDetails && (
-              <p className="text-red-500 text-xs mt-1 whitespace-pre-line">
-                {errorDetails}
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* Success Message */}
-        {success && (
-          <div className="bg-green-50 border border-green-200 text-green-600 px-4 py-3 rounded-lg mb-4 text-center text-sm">
-            {success}
-          </div>
-        )}
-
-        {/* STEP 1: REGISTRATION FORM */}
-        {step === 1 && (
-          <form onSubmit={handleRequestOTP} className="space-y-4 text-gray-800">
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Roll Number <span className="text-red-500">*</span>
-              </label>
-              <input
-                name="roll"
-                placeholder="e.g., 2310013155037"
-                className="w-full border border-gray-300 px-4 py-3 rounded-lg focus:ring-2 focus:ring-[#c026d3] focus:border-transparent outline-none transition-all font-mono"
-                onChange={handleChange}
-                value={form.roll}
-                required
-                autoFocus
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Enter your official university roll number
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Email <span className="text-red-500">*</span>
-              </label>
-              <input
-                name="email"
-                type="email"
-                placeholder="your.email@gmail.com"
-                className="w-full border border-gray-300 px-4 py-3 rounded-lg focus:ring-2 focus:ring-[#0ea5e9] focus:border-transparent outline-none transition-all"
-                onChange={handleChange}
-                value={form.email}
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Phone Number <span className="text-gray-400">(Optional)</span>
-              </label>
-              <input
-                name="phone"
-                type="tel"
-                placeholder="Enter your phone number"
-                className="w-full border border-gray-300 px-4 py-3 rounded-lg focus:ring-2 focus:ring-[#008080] focus:border-transparent outline-none transition-all"
-                onChange={handleChange}
-                value={form.phone}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Password <span className="text-red-500">*</span>
-              </label>
-              <input
-                name="password"
-                type="password"
-                placeholder="Create a strong password"
-                className="w-full border border-gray-300 px-4 py-3 rounded-lg focus:ring-2 focus:ring-[#c026d3] focus:border-transparent outline-none transition-all"
-                onChange={handleChange}
-                value={form.password}
-                required
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                8+ characters with uppercase & number
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Confirm Password <span className="text-red-500">*</span>
-              </label>
-              <input
-                name="confirmPassword"
-                type="password"
-                placeholder="Re-enter your password"
-                className="w-full border border-gray-300 px-4 py-3 rounded-lg focus:ring-2 focus:ring-[#0ea5e9] focus:border-transparent outline-none transition-all"
-                onChange={handleChange}
-                value={form.confirmPassword}
-                required
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full text-white py-3 rounded-lg font-semibold shadow-lg transition transform hover:scale-[1.02] hover:shadow-xl disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none mt-6"
-              style={{
-                background: "linear-gradient(90deg,#c026d3,#0ea5e9,#008080)",
-              }}
-            >
-              {loading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
-                  </svg>
-                  Verifying Roll Number...
-                </span>
-              ) : (
-                "Verify & Continue →"
-              )}
-            </button>
-
-            <p className="text-center text-gray-600 mt-4">
-              Already have an account?{" "}
-              <Link
-                to="/login"
-                className="font-semibold hover:underline"
-                style={{ color: "#c026d3" }}
-              >
-                Login here
-              </Link>
-            </p>
-          </form>
-        )}
-
-        {/* STEP 2: OTP VERIFICATION */}
-        {step === 2 && (
-          <form onSubmit={handleVerifyOTP} className="space-y-6">
-            
-            <div className="text-center">
-              <div 
-                className="inline-flex items-center justify-center w-20 h-20 rounded-full mb-2"
-                style={{
-                  background: "linear-gradient(135deg, rgba(16,185,129,0.1), rgba(14,165,233,0.1))",
-                }}
-              >
-                <span className="text-4xl">✉️</span>
+        <div className="relative z-10 w-full max-w-md">
+          {/* Card */}
+          <div className={`${isDark ? 'bg-gray-800/90 border-gray-700' : 'bg-white/90 border-gray-200'} backdrop-blur-xl border rounded-3xl shadow-2xl p-8 transition-all duration-500`}>
+            {/* Header */}
+            <div className="text-center mb-8">
+              <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full ${step === 1 ? 'bg-gradient-to-br from-indigo-500 to-purple-600' : 'bg-gradient-to-br from-green-500 to-emerald-600'} mb-4 shadow-lg transition-all`}>
+                {step === 1 ? <UserPlus className="w-8 h-8 text-white" /> : <Mail className="w-8 h-8 text-white" />}
               </div>
-              
-              {studentInfo && (
-                <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-2 inline-block">
-                  <p className="text-green-700 text-sm font-medium">
-                    ✓ Verified: {studentInfo.name}
+              <h2 className={`text-3xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} mb-2`}>
+                {step === 1 ? "Student Registration" : "Verify Email"}
+              </h2>
+              {step === 1 && (
+                <p className={`${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                  For University of Lucknow students only
+                </p>
+              )}
+              {step === 2 && studentInfo && (
+                <div className="text-center">
+                  <p className={`text-lg font-semibold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                    {studentInfo.greeting}
                   </p>
-                  <p className="text-green-600 text-xs">
-                    {studentInfo.batch}
+                  <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mt-1`}>
+                    {studentInfo.subtitle}
+                  </p>
+                  <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'} mt-2`}>
+                    Code sent to <strong>{form.email}</strong>
                   </p>
                 </div>
               )}
             </div>
 
-            {/* OTP Input Boxes */}
-            <div className="flex justify-center gap-2">
-              {otp.map((digit, index) => (
-                <input
-                  key={index}
-                  ref={(el) => (otpRefs.current[index] = el)}
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={1}
-                  value={digit}
-                  onChange={(e) => handleOtpChange(index, e.target.value)}
-                  onKeyDown={(e) => handleOtpKeyDown(index, e)}
-                  onPaste={handleOtpPaste}
-                  className="w-12 h-14 text-center text-2xl font-bold border-2 border-gray-300 rounded-xl focus:border-[#c026d3] focus:ring-2 focus:ring-[#c026d3]/20 outline-none transition-all"
-                  style={{
-                    background: digit ? "linear-gradient(135deg, rgba(192,38,211,0.05), rgba(14,165,233,0.05))" : "white"
-                  }}
-                  autoFocus={index === 0}
-                />
-              ))}
-            </div>
+            {/* Error Message */}
+            {error && (
+              <div className={`${isDark ? 'bg-red-900/20 border-red-800 text-red-400' : 'bg-red-50 border-red-300 text-red-700'} border-2 px-4 py-3 rounded-xl mb-6 flex items-start gap-3 animate-shake`}>
+                <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-medium text-sm">{error}</p>
+                  {errorDetails && (
+                    <p className={`text-xs mt-1 ${isDark ? 'text-red-500' : 'text-red-600'} whitespace-pre-line`}>
+                      {errorDetails}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
 
-            {/* ✅ Simple Spam Folder Hint */}
-            <div className="text-center">
-              <p className="text-xs text-gray-600">
-                📬 Check your inbox{" "}
-                <span className="text-orange-600 font-medium">(and spam folder! 🙈)</span>
-              </p>
-            </div>
+            {/* Success Message */}
+            {success && (
+              <div className={`${isDark ? 'bg-green-900/20 border-green-800 text-green-400' : 'bg-green-50 border-green-300 text-green-700'} border-2 px-4 py-3 rounded-xl mb-6 text-center animate-fadeIn`}>
+                <CheckCircle className="w-5 h-5 inline-block mr-2" />
+                <span className="text-sm font-medium">{success}</span>
+              </div>
+            )}
 
-            {/* Timer & Resend */}
-            <div className="text-center">
-              {resendTimer > 0 ? (
-                <p className="text-gray-500 text-sm">
-                  Resend code in{" "}
-                  <span className="font-semibold" style={{ color: "#c026d3" }}>
-                    {resendTimer}s
-                  </span>
+            {/* STEP 1: REGISTRATION FORM */}
+            {step === 1 && (
+              <form onSubmit={handleRequestOTP} className="space-y-5">
+                {/* Roll Number */}
+                <div>
+                  <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                    Roll Number <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <Hash className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isDark ? 'text-gray-500' : 'text-gray-400'}`} />
+                    <input
+                      name="roll"
+                      placeholder="e.g., 2310013155037"
+                      className={`w-full pl-12 pr-4 py-3 rounded-xl border-2 font-mono ${
+                        isDark
+                          ? 'bg-gray-700/50 border-gray-600 text-white placeholder-gray-500 focus:border-indigo-500'
+                          : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:border-indigo-500'
+                      } focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all`}
+                      onChange={handleChange}
+                      value={form.roll}
+                      required
+                      autoFocus
+                    />
+                  </div>
+                  <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-600'} mt-1`}>
+                    Enter your official university roll number
+                  </p>
+                </div>
+
+                {/* Email */}
+                <div>
+                  <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                    Email <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <Mail className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isDark ? 'text-gray-500' : 'text-gray-400'}`} />
+                    <input
+                      name="email"
+                      type="email"
+                      placeholder="your.email@gmail.com"
+                      className={`w-full pl-12 pr-4 py-3 rounded-xl border-2 ${
+                        isDark
+                          ? 'bg-gray-700/50 border-gray-600 text-white placeholder-gray-500 focus:border-indigo-500'
+                          : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:border-indigo-500'
+                      } focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all`}
+                      onChange={handleChange}
+                      value={form.email}
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Phone */}
+                <div>
+                  <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                    Phone Number <span className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>(Optional)</span>
+                  </label>
+                  <div className="relative">
+                    <Phone className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isDark ? 'text-gray-500' : 'text-gray-400'}`} />
+                    <input
+                      name="phone"
+                      type="tel"
+                      placeholder="Enter your phone number"
+                      className={`w-full pl-12 pr-4 py-3 rounded-xl border-2 ${
+                        isDark
+                          ? 'bg-gray-700/50 border-gray-600 text-white placeholder-gray-500 focus:border-indigo-500'
+                          : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:border-indigo-500'
+                      } focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all`}
+                      onChange={handleChange}
+                      value={form.phone}
+                    />
+                  </div>
+                </div>
+
+                {/* Password */}
+                <div>
+                  <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                    Password <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <Lock className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isDark ? 'text-gray-500' : 'text-gray-400'}`} />
+                    <input
+                      name="password"
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Create a strong password"
+                      className={`w-full pl-12 pr-12 py-3 rounded-xl border-2 ${
+                        isDark
+                          ? 'bg-gray-700/50 border-gray-600 text-white placeholder-gray-500 focus:border-indigo-500'
+                          : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:border-indigo-500'
+                      } focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all`}
+                      onChange={handleChange}
+                      value={form.password}
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className={`absolute right-4 top-1/2 -translate-y-1/2 ${isDark ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'} transition-colors`}
+                    >
+                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                  <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-600'} mt-1`}>
+                    8+ characters with uppercase & number
+                  </p>
+                </div>
+
+                {/* Confirm Password */}
+                <div>
+                  <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                    Confirm Password <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <Lock className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isDark ? 'text-gray-500' : 'text-gray-400'}`} />
+                    <input
+                      name="confirmPassword"
+                      type={showConfirmPassword ? "text" : "password"}
+                      placeholder="Re-enter your password"
+                      className={`w-full pl-12 pr-12 py-3 rounded-xl border-2 ${
+                        isDark
+                          ? 'bg-gray-700/50 border-gray-600 text-white placeholder-gray-500 focus:border-indigo-500'
+                          : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:border-indigo-500'
+                      } focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all`}
+                      onChange={handleChange}
+                      value={form.confirmPassword}
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className={`absolute right-4 top-1/2 -translate-y-1/2 ${isDark ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'} transition-colors`}
+                    >
+                      {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Submit Button */}
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white py-4 rounded-xl font-bold shadow-lg hover:shadow-xl transition-all transform hover:scale-[1.02] disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center gap-2 mt-6"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <span>Verifying Roll Number...</span>
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus className="w-5 h-5" />
+                      <span>Verify & Continue →</span>
+                    </>
+                  )}
+                </button>
+
+                {/* Footer */}
+                <p className={`text-center ${isDark ? 'text-gray-400' : 'text-gray-600'} mt-6`}>
+                  Already have an account?{" "}
+                  <Link to="/login" className="font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 transition-colors">
+                    Login here
+                  </Link>
                 </p>
-              ) : (
+              </form>
+            )}
+
+            {/* STEP 2: OTP VERIFICATION */}
+            {step === 2 && (
+              <form onSubmit={handleVerifyOTP} className="space-y-6">
+                {/* OTP Input */}
+                <div>
+                  <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-4 text-center`}>
+                    Enter 6-Digit Code
+                  </label>
+                  <div className="flex justify-center gap-2 mb-4">
+                    {otp.map((digit, index) => (
+                      <input
+                        key={index}
+                        ref={(el) => (otpRefs.current[index] = el)}
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={1}
+                        value={digit}
+                        onChange={(e) => handleOtpChange(index, e.target.value)}
+                        onKeyDown={(e) => handleOtpKeyDown(index, e)}
+                        onPaste={handleOtpPaste}
+                        className={`w-12 h-14 text-center text-2xl font-bold border-2 rounded-xl ${
+                          isDark
+                            ? 'bg-gray-700/50 border-gray-600 text-white focus:border-indigo-500'
+                            : 'bg-white border-gray-300 text-gray-900 focus:border-indigo-500'
+                        } focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all`}
+                        autoFocus={index === 0}
+                      />
+                    ))}
+                  </div>
+                  <p className={`text-xs text-center ${isDark ? 'text-gray-500' : 'text-gray-600'}`}>
+                    📬 Check your inbox{" "}
+                    <span className="text-orange-500 font-medium">(and spam folder! 🙈)</span>
+                  </p>
+                </div>
+
+                {/* Resend Timer */}
+                <div className="text-center">
+                  {resendTimer > 0 ? (
+                    <p className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-600'}`}>
+                      Resend code in{" "}
+                      <span className="font-semibold text-indigo-600 dark:text-indigo-400">
+                        {resendTimer}s
+                      </span>
+                    </p>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleResendOTP}
+                      disabled={loading}
+                      className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 disabled:opacity-50 flex items-center justify-center gap-2 mx-auto"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                      Resend Code
+                    </button>
+                  )}
+                </div>
+
+                {/* Verify Button */}
+                <button
+                  type="submit"
+                  disabled={loading || otp.join("").length !== 6}
+                  className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white py-4 rounded-xl font-bold shadow-lg hover:shadow-xl transition-all transform hover:scale-[1.02] disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <span>Creating Your Account...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-5 h-5" />
+                      <span>Verify & Create Account 🎉</span>
+                    </>
+                  )}
+                </button>
+
+                {/* Back Button */}
                 <button
                   type="button"
-                  onClick={handleResendOTP}
+                  onClick={handleBackToForm}
                   disabled={loading}
-                  className="text-sm font-medium hover:underline disabled:opacity-50"
-                  style={{ color: "#0ea5e9" }}
+                  className={`w-full py-3 border-2 ${
+                    isDark
+                      ? 'border-gray-600 text-gray-300 hover:bg-gray-700/30'
+                      : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                  } font-medium rounded-xl transition disabled:opacity-50 flex items-center justify-center gap-2`}
                 >
-                  Didn't receive code? Resend
+                  <ArrowLeft className="w-5 h-5" />
+                  Back to Form
                 </button>
-              )}
+              </form>
+            )}
+
+            {/* Bottom Note */}
+            <div className={`mt-6 pt-6 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+              <p className={`text-center text-xs ${isDark ? 'text-gray-500' : 'text-gray-600'}`}>
+                Having trouble? Contact your Class Representative
+              </p>
             </div>
-
-            {/* Verify Button */}
-            <button
-              type="submit"
-              disabled={loading || otp.join("").length !== 6}
-              className="w-full text-white py-3 rounded-lg font-semibold shadow-lg transition transform hover:scale-[1.02] hover:shadow-xl disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none"
-              style={{
-                background: "linear-gradient(90deg,#c026d3,#0ea5e9,#008080)",
-              }}
-            >
-              {loading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
-                  </svg>
-                  Creating Your Account...
-                </span>
-              ) : (
-                "Verify & Create Account 🎉"
-              )}
-            </button>
-
-            {/* Back Button */}
-            <button
-              type="button"
-              onClick={handleBackToForm}
-              disabled={loading}
-              className="w-full py-3 border-2 border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition disabled:opacity-50"
-            >
-              ← Back to Form
-            </button>
-          </form>
-        )}
-
-        {/* Footer */}
-        <div className="mt-6 pt-4 border-t border-gray-200">
-          <p className="text-center text-xs text-gray-500">
-            Having trouble? Contact your Class Representative
-          </p>
+          </div>
         </div>
       </div>
-    </div>
+      <Footer />
+
+      {/* Custom Animations */}
+      <style>{`
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          25% { transform: translateX(-10px); }
+          75% { transform: translateX(10px); }
+        }
+        .animate-shake {
+          animation: shake 0.5s ease-in-out;
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(-10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fadeIn {
+          animation: fadeIn 0.5s ease-out;
+        }
+      `}</style>
+    </>
   );
 }
