@@ -69,6 +69,8 @@ const ManageStudents = () => {
 
   // Reset student registration
 // src/pages/ManageStudents.jsx - FIX handleReset function
+// Replace the handleReset function with this:
+
 const handleReset = async () => {
   setShowConfirm(false);
   setLoading(true);
@@ -76,7 +78,7 @@ const handleReset = async () => {
   try {
     const token = localStorage.getItem('adminToken') || localStorage.getItem('ccms-admin-token');
 
-    console.log('🔧 Resetting student:', rollNo); // ✅ Debug
+    console.log('🔧 Resetting student:', rollNo);
 
     const response = await fetch(
       `${import.meta.env.VITE_API_URL}/admin/students/reset`,
@@ -91,17 +93,17 @@ const handleReset = async () => {
     );
 
     const data = await response.json();
-
-    console.log('📥 Response:', data); // ✅ Debug
+    console.log('📥 Response:', data);
 
     if (data.success) {
       success(`✅ ${data.message}`);
       
-      // ✅ FORCE CLEAR WITH NEW REFERENCE
-      setStudentInfo(() => null); // Using function form forces React to update
-      setRollNo(() => ''); // Using function form forces React to update
+      // ✅ FIX: Use setTimeout to ensure state updates after render cycle
+      setTimeout(() => {
+        setStudentInfo(null);
+        setRollNo('');
+      }, 100);
       
-      console.log('✅ UI cleared'); // ✅ Debug
     } else {
       showError(data.message || 'Failed to reset student');
     }

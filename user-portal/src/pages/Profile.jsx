@@ -57,38 +57,74 @@ const Profile = () => {
   const [saving, setSaving] = useState(false);
 
   // Initialize profile data
-  useEffect(() => {
-    const initProfile = async () => {
-      setLoading(true);
-      try {
-        if (user) {
-          const uiProfile = {
-            name: user.name || 'Student User',
-            email: user.email || 'student@campus.com',
-            phone: user.phone || '',
-            userId: user._id || user.id || 'N/A',
-            rollNo: user.rollNo || '',
-            role: user.role || 'Student',
-            joinedDate: user.createdAt || new Date(),
-          };
+// Replace the entire useEffect with this:
 
-          setProfileData(uiProfile);
-          setEditedData({
-            name: uiProfile.name,
-            email: uiProfile.email,
-            phone: uiProfile.phone,
-          });
-        }
-      } catch (err) {
-        console.error('Profile init error:', err);
-        showError('Failed to load profile data');
-      } finally {
-        setLoading(false);
+useEffect(() => {
+  const initProfile = async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      
+      if (!token) {
+        showError('Please login again');
+        navigate('/login');
+        return;
       }
-    };
 
-    initProfile();
-  }, [user, showError]);
+      // ✅ FETCH PROFILE FROM BACKEND (not just auth context)
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/profile`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch profile');
+      }
+
+      const backendUser = await response.json();
+      console.log('📧 Profile from backend:', backendUser);
+
+      const uiProfile = {
+        name: backendUser.name || 'Student User',
+        email: backendUser.email || 'student@campus.com',
+        phone: backendUser.phone || '',
+        userId: backendUser._id?.toString() || backendUser.id || 'N/A',
+        rollNo: backendUser.rollNo || backendUser.roll || '',
+        role: backendUser.role || 'Student',
+        joinedDate: backendUser.createdAt || new Date(), // ✅ Now from backend
+      };
+
+      setProfileData(uiProfile);
+      setEditedData({
+        name: uiProfile.name,
+        email: uiProfile.email,
+        phone: uiProfile.phone,
+      });
+
+    } catch (err) {
+      console.error('Profile init error:', err);
+      showError(err.message || 'Failed to load profile data');
+      
+      // Fallback to auth context if backend fails
+      if (user) {
+        setProfileData({
+          name: user.name || 'Student User',
+          email: user.email || '',
+          phone: user.phone || '',
+          userId: user._id || user.id || 'N/A',
+          rollNo: user.rollNo || user.roll || '',
+          role: user.role || 'Student',
+          joinedDate: user.createdAt || new Date(),
+        });
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  initProfile();
+}, [navigate, showError]); // Remove 'user' from dependencies
 
   const handleLogout = () => {
     setShowLogoutDialog(true);

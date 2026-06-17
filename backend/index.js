@@ -4602,6 +4602,517 @@ app.post("/api/admin/create", auth, requireSuperAdmin, async (req, res) => {
     res.status(500).json({ message: "Failed to create admin" });
   }
 });
+// ============================================
+// ADMIN MANAGEMENT ROUTES
+// ⚠️ IMPORTANT: Specific routes MUST come BEFORE wildcard routes
+// ============================================
+
+// ============================================
+// RECOVERY EMAIL ROUTES (Before wildcard /api/admin/:id)
+// ============================================
+
+app.put(
+  "/api/admin/recovery-email",
+  auth,
+  requireRole("admin"),
+  async (req, res) => {
+    console.log("\n========================================");
+    console.log("📧 PUT /api/admin/recovery-email");
+    console.log("========================================");
+    
+    try {
+      const { recoveryEmail } = req.body;
+      
+      console.log("📥 Request body:", req.body);
+      console.log("👤 req.user:", JSON.stringify(req.user, null, 2));
+      
+      const adminId = req.user?.userId || req.user?.id || req.user?._id;
+      console.log("🔑 Extracted adminId:", adminId);
+      
+      if (!adminId) {
+        console.log("❌ ERROR: No admin ID found in req.user");
+        return res.status(401).json({
+          success: false,
+          message: "Authentication error - please login again",
+        });
+      }
+      
+      if (!recoveryEmail || !recoveryEmail.trim()) {
+        console.log("❌ ERROR: No recovery email provided");
+        return res.status(400).json({
+          success: false,
+          message: "Recovery email is required",
+        });
+      }
+      
+      const normalizedEmail = recoveryEmail.toLowerCase().trim();
+      console.log("📧 Normalized email:", normalizedEmail);
+      
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(normalizedEmail)) {
+        console.log("❌ ERROR: Invalid email format");
+        return res.status(400).json({
+          success: false,
+          message: "Please enter a valid email address",
+        });
+      }
+      
+      const adminObjectId = toObjectId(adminId);
+      console.log("🔄 Converted ObjectId:", adminObjectId);
+      
+      if (!adminObjectId) {
+        console.log("❌ ERROR: Failed to convert admin ID to ObjectId");
+        return res.status(400).json({
+          success: false,
+          message: "Session error - please login again",
+        });
+      }
+      
+      console.log("🔍 Looking for admin with _id:", adminObjectId);
+      const currentAdmin = await Users.findOne({ _id: adminObjectId });
+      
+      console.log("👤 Found admin:", currentAdmin ? {
+        name: currentAdmin.name,
+        email: currentAdmin.email,
+        adminType: currentAdmin.adminType,
+        role: currentAdmin.role
+      } : "NOT FOUND");
+      
+      if (!currentAdmin) {
+        console.log("❌ ERROR: Admin not found in database");
+        return res.status(404).json({
+          success: false,
+          message: "Admin account not found - please login again",
+        });
+      }
+      
+      const adminType = currentAdmin.adminType || "super";
+      console.log("🔐 Admin type:", adminType);
+      
+      if (adminType !== "super") {
+        console.log("❌ ERROR: Not a super admin");
+        return res.status(403).json({
+          success: false,
+          message: "Only Super Admins can set recovery email",
+        });
+      }
+      
+      if (normalizedEmail === currentAdmin.email.toLowerCase()) {
+        console.log("❌ ERROR: Same as login email");
+        return res.status(400).json({
+          success: false,
+          message: "Recovery email must be different from your login email",
+        });
+      }
+      
+      const deleteResult = await OTPs.deleteMany({
+        userId: adminId.toString(),
+        type: "recovery_email_verification",
+      });
+      console.log("🗑️ Deleted old OTPs:", deleteResult.deletedCount);
+      
+      const otp = otpGenerator.generate(6, {
+        digits: true,
+        upperCaseAlphabets: false,
+        lowerCaseAlphabets: false,
+        specialChars: false,
+      });
+      console.log("🔢 Generated OTP:", otp);
+      
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + 10 * 60 * 1000);
+      
+      await OTPs.insertOne({
+        userId: adminId.toString(),
+        email: normalizedEmail,
+        otp: otp,
+        type: "recovery_email_verification",
+        verified: false,
+        createdAt: now,
+        expiresAt: expiresAt,
+      });
+      console.log("💾 OTP saved to database");
+      
+      await Users.updateOne(
+        { _id: adminObjectId },
+        {
+          $set: {
+            pendingRecoveryEmail: normalizedEmail,
+            updatedAt: now,
+          },
+        }
+      );
+      console.log("💾 Pending recovery email saved");
+      
+      try {
+        await sendPasswordResetEmail(normalizedEmail, otp, currentAdmin.name);
+        console.log("✅ Email sent successfully to:", normalizedEmail);
+      } catch (emailError) {
+        console.error("❌ Email sending failed:", emailError.message);
+        return res.status(500).json({
+          success: false,
+          message: "Failed to send verification email. Please try again.",
+        });
+      }
+      
+      console.log("✅ SUCCESS: Recovery email OTP sent");
+      console.log("========================================\n");
+      
+      res.json({
+        success: true,
+        message: `Verification code sent to ${normalizedEmail}`,
+        maskedEmail: normalizedEmail.replace(/(.{3}).*(@.*)/, "$1***$2"),
+      });
+      
+    } catch (error) {
+      console.error("❌ EXCEPTION:", error);
+      console.log("========================================\n");
+      res.status(500).json({
+        success: false,
+        message: "Server error: " + error.message,
+      });
+    }
+  }
+);
+
+app.post(
+  "/api/admin/recovery-email/verify",
+  auth,
+  requireRole("admin"),
+  async (req, res) => {
+    console.log("\n========================================");
+    console.log("🔐 POST /api/admin/recovery-email/verify");
+    console.log("========================================");
+    
+    try {
+      const { otp } = req.body;
+      const adminId = req.user?.userId || req.user?.id || req.user?._id;
+      
+      console.log("📥 OTP received:", otp);
+      console.log("🔑 Admin ID:", adminId);
+      
+      if (!adminId) {
+        return res.status(401).json({
+          success: false,
+          message: "Authentication error - please login again",
+        });
+      }
+      
+      if (!otp || !otp.trim()) {
+        return res.status(400).json({
+          success: false,
+          message: "Verification code is required",
+        });
+      }
+      
+      const adminObjectId = toObjectId(adminId);
+      if (!adminObjectId) {
+        return res.status(400).json({
+          success: false,
+          message: "Session error - please login again",
+        });
+      }
+      
+      const currentAdmin = await Users.findOne({ _id: adminObjectId });
+      console.log("👤 Found admin:", currentAdmin?.name);
+      
+      if (!currentAdmin) {
+        return res.status(404).json({
+          success: false,
+          message: "Admin account not found",
+        });
+      }
+      
+      const adminType = currentAdmin.adminType || "super";
+      if (adminType !== "super") {
+        return res.status(403).json({
+          success: false,
+          message: "Only Super Admins can verify recovery email",
+        });
+      }
+      
+      if (!currentAdmin.pendingRecoveryEmail) {
+        return res.status(400).json({
+          success: false,
+          message: "No pending recovery email. Please set a recovery email first.",
+        });
+      }
+      
+      const otpDoc = await OTPs.findOne({
+        userId: adminId.toString(),
+        otp: otp.trim(),
+        type: "recovery_email_verification",
+        verified: false,
+        expiresAt: { $gt: new Date() },
+      });
+      
+      console.log("🔢 OTP document found:", !!otpDoc);
+      
+      if (!otpDoc) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid or expired verification code",
+        });
+      }
+      
+      await Users.updateOne(
+        { _id: adminObjectId },
+        {
+          $set: {
+            recoveryEmail: currentAdmin.pendingRecoveryEmail,
+            recoveryEmailVerified: true,
+            updatedAt: new Date(),
+          },
+          $unset: {
+            pendingRecoveryEmail: "",
+          },
+        }
+      );
+      
+      await OTPs.deleteMany({
+        userId: adminId.toString(),
+        type: "recovery_email_verification",
+      });
+      
+      try {
+        await AdminLogs.insertOne({
+          adminId: adminId.toString(),
+          adminName: currentAdmin.name,
+          action: "SET_RECOVERY_EMAIL",
+          details: {
+            recoveryEmail: currentAdmin.pendingRecoveryEmail.replace(/(.{3}).*(@.*)/, "$1***$2"),
+          },
+          timestamp: new Date(),
+        });
+      } catch (logErr) {
+        console.warn("⚠️ Failed to log action:", logErr.message);
+      }
+      
+      console.log("✅ SUCCESS: Recovery email verified");
+      console.log("========================================\n");
+      
+      res.json({
+        success: true,
+        message: "Recovery email verified and saved successfully",
+        recoveryEmail: currentAdmin.pendingRecoveryEmail.replace(/(.{3}).*(@.*)/, "$1***$2"),
+      });
+      
+    } catch (error) {
+      console.error("❌ EXCEPTION:", error);
+      res.status(500).json({
+        success: false,
+        message: "Verification failed: " + error.message,
+      });
+    }
+  }
+);
+
+app.get(
+  "/api/admin/recovery-email/status",
+  auth,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      const adminId = req.user?.userId || req.user?.id || req.user?._id;
+      
+      if (!adminId) {
+        return res.status(401).json({
+          success: false,
+          message: "Authentication required",
+        });
+      }
+      
+      const adminObjectId = toObjectId(adminId);
+      if (!adminObjectId) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid session",
+        });
+      }
+      
+      const admin = await Users.findOne(
+        { _id: adminObjectId },
+        { projection: { recoveryEmail: 1, recoveryEmailVerified: 1, adminType: 1 } }
+      );
+      
+      if (!admin) {
+        return res.status(404).json({
+          success: false,
+          message: "Admin not found",
+        });
+      }
+      
+      res.json({
+        success: true,
+        hasRecoveryEmail: !!(admin.recoveryEmail && admin.recoveryEmailVerified),
+        maskedEmail: admin.recoveryEmail
+          ? admin.recoveryEmail.replace(/(.{3}).*(@.*)/, "$1***$2")
+          : null,
+        adminType: admin.adminType || "super",
+      });
+      
+    } catch (error) {
+      console.error("Get recovery status error:", error);
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+// ============================================
+// ADMIN PASSWORD RESET (Before wildcard /api/admin/:id)
+// ============================================
+
+app.put(
+  "/api/admin/:adminId/reset-password",
+  auth,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      const { adminId } = req.params;
+      const { newPassword } = req.body;
+
+      console.log(`🔑 Password reset request for adminId: ${adminId}`);
+
+      const currentAdmin = await Users.findOne({ _id: toObjectId(req.user.userId) });
+      
+      if (!currentAdmin || currentAdmin.adminType !== "super") {
+        return res.status(403).json({
+          success: false,
+          message: "Only Super Admins can reset other admin passwords",
+        });
+      }
+
+      if (!newPassword) {
+        return res.status(400).json({
+          success: false,
+          message: "New password is required",
+        });
+      }
+
+      if (newPassword.length < 6) {
+        return res.status(400).json({
+          success: false,
+          message: "Password must be at least 6 characters",
+        });
+      }
+
+      if (!adminId || adminId === 'undefined' || adminId === 'null') {
+        console.log(`❌ Invalid adminId received: ${adminId}`);
+        return res.status(400).json({
+          success: false,
+          message: "Invalid admin ID provided",
+        });
+      }
+
+      const adminObjectId = toObjectId(adminId);
+      if (!adminObjectId) {
+        console.log(`❌ Could not convert to ObjectId: ${adminId}`);
+        return res.status(400).json({
+          success: false,
+          message: "Invalid admin ID format",
+        });
+      }
+
+      if (adminId === req.user.userId) {
+        return res.status(400).json({
+          success: false,
+          message: "Use the 'Change Password' feature to change your own password",
+        });
+      }
+
+      const targetAdmin = await Users.findOne({
+        _id: adminObjectId,
+        role: "admin",
+      });
+
+      if (!targetAdmin) {
+        console.log(`❌ Admin not found with ID: ${adminId}`);
+        return res.status(404).json({
+          success: false,
+          message: "Admin not found",
+        });
+      }
+
+      console.log(`✅ Found admin: ${targetAdmin.name} (${targetAdmin.email})`);
+
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+      await Users.updateOne(
+        { _id: adminObjectId },
+        {
+          $set: {
+            password: hashedPassword,
+            updatedAt: new Date(),
+          },
+        }
+      );
+
+      await AdminLogs.insertOne({
+        adminId: req.user.userId,
+        adminName: currentAdmin.name,
+        adminEmail: currentAdmin.email,
+        action: "RESET_ADMIN_PASSWORD",
+        targetAdminId: adminId,
+        targetAdminName: targetAdmin.name,
+        targetAdminEmail: targetAdmin.email,
+        timestamp: new Date(),
+        ipAddress: req.ip,
+      });
+
+      console.log(`✅ Password reset for ${targetAdmin.email} by Super Admin ${currentAdmin.email}`);
+
+      res.json({
+        success: true,
+        message: `Password reset successfully for ${targetAdmin.name}`,
+      });
+    } catch (error) {
+      console.error("❌ Admin password reset error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to reset password: " + error.message,
+      });
+    }
+  }
+);
+
+// ============================================
+// ADMIN STATS (Before wildcard /api/admin/:id)
+// ============================================
+
+app.get("/api/admin/stats", auth, requireSuperAdmin, async (req, res) => {
+  try {
+    const total = await Users.countDocuments({ role: "admin", isActive: { $ne: false } });
+    const superAdmins = await Users.countDocuments({ role: "admin", adminType: "super", isActive: { $ne: false } });
+    const deptAdmins = await Users.countDocuments({ role: "admin", adminType: "department", isActive: { $ne: false } });
+    const womensCell = await Users.countDocuments({ role: "admin", adminType: "womens_cell", isActive: { $ne: false } });
+
+    const byType = await Users.aggregate([
+      { $match: { role: "admin", isActive: { $ne: false } } },
+      { $group: { _id: "$adminType", count: { $sum: 1 } } },
+    ]).toArray();
+
+    res.json({
+      success: true,
+      data: {
+        total,
+        superAdmins,
+        deptAdmins,
+        womensCell,
+        byType,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching admin stats:", error);
+    res.status(500).json({ message: "Failed to fetch stats" });
+  }
+});
+
+// ============================================
+// WILDCARD ROUTES (MUST BE LAST)
+// ============================================
 
 // PUT: Update admin (Super Admin only)
 app.put("/api/admin/:id", auth, requireSuperAdmin, async (req, res) => {
@@ -4618,7 +5129,6 @@ app.put("/api/admin/:id", auth, requireSuperAdmin, async (req, res) => {
       return res.status(404).json({ message: "Admin not found" });
     }
 
-    // Prevent super admin from changing their own type
     if (id === req.user.userId && adminType && adminType !== 'super') {
       return res.status(400).json({ 
         message: "You cannot change your own admin type" 
@@ -4629,7 +5139,6 @@ app.put("/api/admin/:id", auth, requireSuperAdmin, async (req, res) => {
 
     if (name !== undefined) updateFields.name = name.trim();
     if (email !== undefined) {
-      // Check email conflict
       const emailConflict = await Users.findOne({
         _id: { $ne: toObjectId(id) },
         email: email.toLowerCase().trim(),
@@ -4643,7 +5152,6 @@ app.put("/api/admin/:id", auth, requireSuperAdmin, async (req, res) => {
     if (permissions !== undefined) updateFields.permissions = permissions;
     if (isActive !== undefined) updateFields.isActive = isActive;
 
-    // Handle department
     if (department !== undefined) {
       if (department && ObjectId.isValid(department)) {
         const dept = await Departments.findOne({ _id: toObjectId(department) });
@@ -4692,7 +5200,6 @@ app.delete("/api/admin/:id", auth, requireSuperAdmin, async (req, res) => {
       return res.status(400).json({ message: "Invalid admin ID" });
     }
 
-    // Prevent self-deletion
     if (id === req.user.userId) {
       return res.status(400).json({ 
         message: "You cannot delete your own account" 
@@ -4704,7 +5211,6 @@ app.delete("/api/admin/:id", auth, requireSuperAdmin, async (req, res) => {
       return res.status(404).json({ message: "Admin not found" });
     }
 
-    // Soft delete
     await Users.updateOne(
       { _id: toObjectId(id) },
       { $set: { isActive: false, updatedAt: new Date() } }
@@ -4727,42 +5233,330 @@ app.delete("/api/admin/:id", auth, requireSuperAdmin, async (req, res) => {
   }
 });
 
-// GET: Admin stats (for dashboard)
-app.get("/api/admin/stats", auth, requireSuperAdmin, async (req, res) => {
+// ============================================
+// FORGOT PASSWORD - STUDENT
+// ============================================
+
+function getPasswordResetOTPTemplate(name, otp) {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin:0;padding:0;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background-color:#f0f2f5;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:linear-gradient(135deg,#ef4444 0%,#dc2626 100%);padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:20px;box-shadow:0 20px 60px rgba(0,0,0,0.3);overflow:hidden;">
+          <tr>
+            <td style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);padding:40px 30px;text-align:center;">
+              <div style="font-size:50px;margin-bottom:15px;">🔐</div>
+              <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:700;">Password Reset</h1>
+              <p style="margin:10px 0 0 0;color:rgba(255,255,255,0.9);font-size:16px;">Verify your identity to reset password</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:40px 30px;">
+              <h2 style="color:#1f2937;font-size:22px;margin:0 0 15px 0;">Hello ${name || "there"}! 👋</h2>
+              <p style="color:#4b5563;font-size:16px;line-height:1.6;margin:0 0 25px 0;">
+                We received a request to reset your password for your <strong>CCMS</strong> account. 
+                Use the verification code below to proceed.
+              </p>
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin:30px 0;">
+                <tr>
+                  <td style="background:linear-gradient(135deg,#fef3c7 0%,#fde68a 100%);border-radius:16px;padding:30px;text-align:center;border:2px dashed #f59e0b;">
+                    <div style="color:#92400e;font-size:14px;margin-bottom:15px;text-transform:uppercase;letter-spacing:2px;font-weight:600;">Your Reset Code</div>
+                    <div style="font-size:42px;font-weight:800;color:#d97706;letter-spacing:8px;font-family:'Courier New',monospace;">${otp}</div>
+                    <div style="margin-top:15px;font-size:14px;color:#dc2626;font-weight:600;">⏰ Valid for 10 minutes only</div>
+                  </td>
+                </tr>
+              </table>
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin:25px 0;">
+                <tr>
+                  <td style="background:#fef2f2;border-left:4px solid #ef4444;padding:15px 20px;border-radius:0 8px 8px 0;">
+                    <p style="margin:0;font-size:14px;color:#991b1b;">
+                      <strong>⚠️ Security Warning:</strong><br>
+                      If you didn't request this password reset, please ignore this email. Your password will remain unchanged.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#f9fafb;padding:25px 30px;text-align:center;border-top:1px solid #e5e7eb;">
+              <p style="margin:0 0 10px 0;color:#6b7280;font-size:13px;">
+                This is an automated message from CCMS.
+              </p>
+              <p style="margin:0;color:#9ca3af;font-size:12px;">
+                © 2025 Campus Complaint Management System
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+async function sendPasswordResetEmail(email, otp, name) {
   try {
-    const total = await Users.countDocuments({ role: "admin", isActive: { $ne: false } });
-    const superAdmins = await Users.countDocuments({ role: "admin", adminType: "super", isActive: { $ne: false } });
-    const deptAdmins = await Users.countDocuments({ role: "admin", adminType: "department", isActive: { $ne: false } });
-    const womensCell = await Users.countDocuments({ role: "admin", adminType: "womens_cell", isActive: { $ne: false } });
+    console.log(`📤 Sending password reset OTP to: ${email}`);
+    
+    const msg = {
+      to: email,
+      from: process.env.SENDGRID_FROM_EMAIL,
+      subject: '🔐 Password Reset - CCMS',
+      html: getPasswordResetOTPTemplate(name, otp),
+    };
 
-    const byType = await Users.aggregate([
-      { $match: { role: "admin", isActive: { $ne: false } } },
-      { $group: { _id: "$adminType", count: { $sum: 1 } } },
-    ]).toArray();
+    await sgMail.send(msg);
+    console.log(`✅ Password reset OTP sent to ${email}`);
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Password reset email error:', error.message);
+    throw error;
+  }
+}
 
-    res.json({
+app.post("/api/auth/forgot-password/send-otp", async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required",
+      });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const user = await Users.findOne({ email: normalizedEmail });
+    
+    if (!user) {
+      console.log(`❌ Forgot password: Email not found - ${normalizedEmail}`);
+      return res.status(404).json({
+        success: false,
+        message: "No account found with this email address.",
+        suggestion: "Please check the email or register a new account.",
+      });
+    }
+
+    if (user.role === "admin") {
+      return res.status(400).json({
+        success: false,
+        message: "Admin accounts cannot use this reset method.",
+        suggestion: "Please contact the Super Admin or use the admin recovery option.",
+      });
+    }
+
+    const recentOTP = await OTPs.findOne({
+      email: normalizedEmail,
+      type: "password_reset",
+      createdAt: { $gt: new Date(Date.now() - 60 * 1000) },
+    });
+
+    if (recentOTP) {
+      const waitTime = Math.ceil((60000 - (Date.now() - recentOTP.createdAt.getTime())) / 1000);
+      return res.status(429).json({
+        success: false,
+        message: `Please wait ${waitTime} seconds before requesting another code`,
+        waitTime: waitTime,
+      });
+    }
+
+    await OTPs.deleteMany({ email: normalizedEmail, type: "password_reset" });
+
+    const otp = otpGenerator.generate(6, {
+      digits: true,
+      upperCaseAlphabets: false,
+      lowerCaseAlphabets: false,
+      specialChars: false,
+    });
+
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 10 * 60 * 1000);
+
+    console.log(`🔐 Password reset OTP for ${user.name}: ${otp}`);
+
+    await OTPs.insertOne({
+      email: normalizedEmail,
+      otp: otp,
+      type: "password_reset",
+      userId: user._id.toString(),
+      userName: user.name,
+      verified: false,
+      createdAt: now,
+      expiresAt: expiresAt,
+    });
+
+    await sendPasswordResetEmail(normalizedEmail, otp, user.name);
+
+    res.status(200).json({
       success: true,
-      data: {
-        total,
-        superAdmins,
-        deptAdmins,
-        womensCell,
-        byType,
-      },
+      message: `Password reset code sent to ${normalizedEmail}`,
+      maskedEmail: normalizedEmail.replace(/(.{3}).*(@.*)/, '$1***$2'),
+      userName: user.name.split(' ')[0],
+      expiresIn: 600,
     });
   } catch (error) {
-    console.error("Error fetching admin stats:", error);
-    res.status(500).json({ message: "Failed to fetch stats" });
+    console.error("❌ Forgot password send OTP error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to send reset code. Please try again.",
+    });
   }
 });
 
+app.post("/api/auth/forgot-password/verify-otp", async (req, res) => {
+  try {
+    const { email, otp } = req.body;
 
+    if (!email || !otp) {
+      return res.status(400).json({
+        success: false,
+        message: "Email and OTP are required",
+      });
+    }
 
+    const normalizedEmail = email.toLowerCase().trim();
 
+    const otpDoc = await OTPs.findOne({
+      email: normalizedEmail,
+      otp: otp.trim(),
+      type: "password_reset",
+      verified: false,
+      expiresAt: { $gt: new Date() },
+    });
 
+    if (!otpDoc) {
+      const expiredOtp = await OTPs.findOne({
+        email: normalizedEmail,
+        otp: otp.trim(),
+        type: "password_reset",
+      });
 
+      if (expiredOtp) {
+        return res.status(400).json({
+          success: false,
+          message: "This code has expired. Please request a new one.",
+        });
+      }
 
+      return res.status(400).json({
+        success: false,
+        message: "Invalid verification code. Please check and try again.",
+      });
+    }
 
+    await OTPs.updateOne(
+      { _id: otpDoc._id },
+      { $set: { verified: true } }
+    );
+
+    const resetToken = jwt.sign(
+      {
+        userId: otpDoc.userId,
+        email: normalizedEmail,
+        type: "password_reset",
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "15m" }
+    );
+
+    console.log(`✅ Password reset OTP verified for ${normalizedEmail}`);
+
+    res.status(200).json({
+      success: true,
+      message: "Code verified successfully",
+      resetToken: resetToken,
+    });
+  } catch (error) {
+    console.error("❌ Verify OTP error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Verification failed. Please try again.",
+    });
+  }
+});
+
+app.post("/api/auth/forgot-password/reset", async (req, res) => {
+  try {
+    const { resetToken, newPassword } = req.body;
+
+    if (!resetToken || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Reset token and new password are required",
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must be at least 6 characters",
+      });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(resetToken, process.env.JWT_SECRET);
+    } catch (err) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or expired reset link. Please request a new one.",
+      });
+    }
+
+    if (decoded.type !== "password_reset") {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid reset token",
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    const result = await Users.updateOne(
+      { _id: toObjectId(decoded.userId) },
+      {
+        $set: {
+          password: hashedPassword,
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    if (!result.matchedCount) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    await OTPs.deleteMany({
+      email: decoded.email,
+      type: "password_reset",
+    });
+
+    console.log(`✅ Password reset successful for ${decoded.email}`);
+
+    res.status(200).json({
+      success: true,
+      message: "Password reset successfully. You can now login with your new password.",
+    });
+  } catch (error) {
+    console.error("❌ Reset password error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to reset password. Please try again.",
+    });
+  }
+});
 
 // ---------- 404 & ERROR HANDLERS ----------
 app.use((req, res) => {

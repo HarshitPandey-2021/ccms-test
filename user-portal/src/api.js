@@ -1,5 +1,9 @@
-// user-portal/src/api.js
+// user-portal/src/api.js - COMPLETE UPDATED FILE
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:4000/api";
+
+// ============================================
+// TOKEN MANAGEMENT
+// ============================================
 
 function isTokenExpired(token) {
   if (!token) return true;
@@ -39,7 +43,8 @@ async function refreshAccessToken() {
     localStorage.removeItem("token");
     localStorage.removeItem("refreshToken");
     localStorage.removeItem("user");
-    window.location.href = "http://localhost:5174/login";
+    // ✅ Use relative path for redirect
+    window.location.href = "/login";
     return null;
   }
 }
@@ -99,6 +104,10 @@ async function handleResponse(res) {
   return data;
 }
 
+// ============================================
+// AUTH FUNCTIONS
+// ============================================
+
 export async function login(email, password) {
   const res = await fetch(`${API_BASE}/auth/login`, {
     method: "POST",
@@ -117,6 +126,10 @@ export async function register(userData) {
   return handleResponse(res);
 }
 
+// ============================================
+// PROFILE FUNCTIONS
+// ============================================
+
 export async function getProfile() {
   try {
     const res = await apiCall(`${API_BASE}/profile`);
@@ -134,28 +147,32 @@ export async function updateProfile(data) {
   return handleResponse(res);
 }
 
-// user-portal/src/api.js - FIXED changePassword function
-
+// ✅ FIXED: Change Password Function
 export async function changePassword(passwordData) {
   try {
     let token = localStorage.getItem("token");
+    
     if (isTokenExpired(token)) {
       token = await refreshAccessToken();
-      if (!token) throw new Error("Authentication failed");
+      if (!token) throw new Error("Authentication failed. Please login again.");
     }
 
-    // ✅ Changed endpoint to match backend
-    const res = await fetch(`${API_BASE}/profile/change-password`, {
+    // ✅ Correct endpoint: /auth/change-password
+    const res = await fetch(`${API_BASE}/auth/change-password`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify(passwordData),
+      body: JSON.stringify({
+        currentPassword: passwordData.currentPassword,
+        newPassword: passwordData.newPassword,
+      }),
     });
 
     return handleResponse(res);
   } catch (error) {
+    console.error("Change password error:", error);
     throw error;
   }
 }
@@ -168,6 +185,10 @@ export async function getMyStats() {
     return { total: 0, pending: 0, inProgress: 0, resolved: 0 };
   }
 }
+
+// ============================================
+// COMPLAINT FUNCTIONS
+// ============================================
 
 export async function getMyComplaints() {
   try {
@@ -233,6 +254,33 @@ export async function updateComplaint(id, formData) {
   }
 }
 
+export async function submitFeedback(complaintId, feedbackData) {
+  try {
+    let token = localStorage.getItem("token");
+    if (isTokenExpired(token)) {
+      token = await refreshAccessToken();
+      if (!token) throw new Error("Authentication failed");
+    }
+
+    const res = await fetch(`${API_BASE}/complaints/${complaintId}/feedback`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(feedbackData),
+    });
+
+    return handleResponse(res);
+  } catch (error) {
+    throw error;
+  }
+}
+
+// ============================================
+// DEPARTMENT FUNCTIONS
+// ============================================
+
 export async function getDepartments() {
   try {
     const res = await apiCall(`${API_BASE}/departments`);
@@ -241,6 +289,10 @@ export async function getDepartments() {
     return [];
   }
 }
+
+// ============================================
+// PDF UTILITIES
+// ============================================
 
 export function getViewablePdfUrl(url) {
   if (!url) return null;
@@ -273,8 +325,6 @@ export async function viewPdf(url) {
   }
 }
 
-
-
 export async function downloadPdf(url, filename = "document.pdf") {
   if (!url) throw new Error("No PDF URL provided");
   try {
@@ -302,54 +352,90 @@ export async function downloadPdf(url, filename = "document.pdf") {
   }
 }
 
+// ============================================
+// FORGOT PASSWORD FUNCTIONS (NEW)
+// ============================================
 
+// Step 1: Send OTP for password reset
+export async function forgotPasswordSendOTP(email) {
+  const res = await fetch(`${API_BASE}/auth/forgot-password/send-otp`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ email: email.trim().toLowerCase() }),
+  });
 
-export async function submitFeedback(complaintId, feedbackData) {
-  try {
-    let token = localStorage.getItem("token");
-    if (isTokenExpired(token)) {
-      token = await refreshAccessToken();
-      if (!token) throw new Error("Authentication failed");
-    }
-
-    const res = await fetch(`${API_BASE}/complaints/${complaintId}/feedback`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(feedbackData),
-    });
-
-    return handleResponse(res);
-  } catch (error) {
-    throw error;
-  }
+  return handleResponse(res);
 }
 
+// Step 2: Verify OTP
+export async function forgotPasswordVerifyOTP(email, otp) {
+  const res = await fetch(`${API_BASE}/auth/forgot-password/verify-otp`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ 
+      email: email.trim().toLowerCase(),
+      otp: otp.trim()
+    }),
+  });
 
+  return handleResponse(res);
+}
 
+// Step 3: Reset password with token
+export async function forgotPasswordReset(resetToken, newPassword) {
+  const res = await fetch(`${API_BASE}/auth/forgot-password/reset`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ 
+      resetToken,
+      newPassword
+    }),
+  });
+
+  return handleResponse(res);
+}
+
+// ============================================
+// DEFAULT EXPORT
+// ============================================
 
 const api = {
+  // Auth
   login,
   register,
+  
+  // Profile
   getProfile,
   updateProfile,
   changePassword,
   getMyStats,
+  
+  // Complaints
   getMyComplaints,
   getComplaintById,
   submitComplaintWithFiles,
   submitComplaint,
   updateComplaint,
+  submitFeedback,
+  
+  // Departments
   getDepartments,
+  
+  // PDF
   getViewablePdfUrl,
   viewPdf,
   downloadPdf,
-  submitFeedback, 
-
   
-
+  // Forgot Password
+  forgotPasswordSendOTP,
+  forgotPasswordVerifyOTP,
+  forgotPasswordReset,
 };
 
 export default api;

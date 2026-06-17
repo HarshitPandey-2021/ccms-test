@@ -127,3 +127,51 @@ export async function getLandingStatsApi() {
     };
   }
 }
+
+
+// ==================== FORGOT PASSWORD FUNCTIONS ====================
+
+// Step 1: Send OTP for password reset
+export async function forgotPasswordSendOTP(email) {
+  const res = await fetch(`${API_BASE}/auth/forgot-password/send-otp`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ email: email.trim().toLowerCase() }),
+  });
+
+  return handleResponse(res);
+}
+
+// Step 2: Verify OTP
+export async function forgotPasswordVerifyOTP(email, otp) {
+  const res = await fetch(`${API_BASE}/auth/forgot-password/verify-otp`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ 
+      email: email.trim().toLowerCase(),
+      otp: otp.trim()
+    }),
+  });
+
+  return handleResponse(res);
+}
+
+// Step 3: Reset password with token
+export async function forgotPasswordReset(resetToken, newPassword) {
+  const res = await fetch(`${API_BASE}/auth/forgot-password/reset`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ 
+      resetToken,
+      newPassword
+    }),
+  });
+
+  return handleResponse(res);
+}

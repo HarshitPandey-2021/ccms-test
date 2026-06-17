@@ -1,4 +1,4 @@
-// api.js
+// admin/src/api.js - COMPLETE UPDATED FILE
 import {
   getAdminToken,
   getAdminRefreshToken,
@@ -6,6 +6,10 @@ import {
 } from "./utils/tokenUtils.js";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:4000/api";
+
+// ============================================
+// TOKEN & AUTH HELPERS
+// ============================================
 
 function isTokenExpired(token) {
   if (!token) return true;
@@ -47,12 +51,11 @@ async function refreshAccessToken() {
     return null;
   } catch {
     logoutAdmin();
-    
-    // ✅ FIXED: Use relative path (works in any environment)
     window.location.href = "/login";
     return null;
   }
 }
+
 async function getAuthHeaders() {
   let token = getAdminToken();
 
@@ -102,8 +105,7 @@ async function handleResponse(res) {
   }
 
   if (!res.ok) {
-    const message =
-      data?.message || `Request failed with status ${res.status}`;
+    const message = data?.message || `Request failed with status ${res.status}`;
     throw new Error(message);
   }
 
@@ -170,7 +172,7 @@ export async function getComplaintById(id) {
     }
   }
 
-  throw new Error('Complaint not found - all routes failed');
+  throw new Error("Complaint not found - all routes failed");
 }
 
 export async function updateComplaintStatus(id, status, adminRemarks, assignedTo = null) {
@@ -198,7 +200,7 @@ export async function updateComplaintStatus(id, status, adminRemarks, assignedTo
     }
   }
 
-  throw new Error('Failed to update status - all routes failed');
+  throw new Error("Failed to update status - all routes failed");
 }
 
 export async function updateComplaint(id, updates) {
@@ -227,7 +229,7 @@ export async function updateComplaint(id, updates) {
     }
   }
 
-  throw new Error('Failed to update complaint - all routes failed');
+  throw new Error("Failed to update complaint - all routes failed");
 }
 
 export async function markComplaintAsRead(id) {
@@ -241,7 +243,6 @@ export async function getTrends(days = 7) {
   const res = await apiCall(`${API_BASE}/complaints/admin/trends?days=${days}`);
   return handleResponse(res);
 }
-
 
 // ============================================
 // DEPARTMENTS
@@ -285,12 +286,12 @@ export async function deleteDepartment(id) {
 }
 
 // ============================================
-// STAFF (Add after Departments section)
+// STAFF
 // ============================================
 
 export async function getStaff(departmentId = null) {
   try {
-    const url = departmentId 
+    const url = departmentId
       ? `${API_BASE}/staff?department=${departmentId}`
       : `${API_BASE}/staff`;
     const res = await apiCall(url);
@@ -394,7 +395,7 @@ export async function updateProfile(data) {
 
 export async function changePassword(currentPassword, newPassword) {
   const res = await apiCall(`${API_BASE}/auth/change-password`, {
-    method: "PUT", // ✅ Changed from POST to PUT
+    method: "PUT",
     body: JSON.stringify({ currentPassword, newPassword }),
   });
   return handleResponse(res);
@@ -418,9 +419,7 @@ export async function resetStudent(rollNo) {
     body: JSON.stringify({ rollNo }),
   });
   return handleResponse(res);
-
 }
-
 
 // ============================================
 // ADMIN MANAGEMENT
@@ -460,17 +459,99 @@ export async function getAdminStats() {
 }
 
 // ============================================
-// ADMIN LOGS
+// ADMIN PASSWORD RESET (Super Admin Only)
 // ============================================
 
-export async function getAllLogs() {
-  const res = await apiCall(`${API_BASE}/admin/logs`);
+export async function resetAdminPassword(adminId, newPassword) {
+  if (!adminId) {
+    throw new Error("Admin ID is required");
+  }
+  
+  const res = await apiCall(`${API_BASE}/admin/${adminId}/reset-password`, {
+    method: "PUT",
+    body: JSON.stringify({ newPassword }),
+  });
   return handleResponse(res);
 }
 
-export async function logout() {
-  logoutAdmin();
+// ============================================
+// RECOVERY EMAIL (Super Admin Only)
+// ✅ FIXED: Now uses apiCall instead of raw fetch
+// ============================================
+
+// In api.js - Update the setRecoveryEmailApi function with debugging
+
+export async function setRecoveryEmailApi(recoveryEmail) {
+  console.log('🔍 DEBUG: setRecoveryEmailApi called');
+  console.log('   └─ recoveryEmail:', recoveryEmail);
+  
+  // Check the token being used
+  const token = localStorage.getItem('adminToken');
+  console.log('   └─ Token exists:', !!token);
+  
+  if (token) {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      console.log('   └─ Token payload:', payload);
+    } catch (e) {
+      console.log('   └─ Could not decode token');
+    }
+  }
+  
+  const res = await apiCall(`${API_BASE}/admin/recovery-email`, {
+    method: "PUT",
+    body: JSON.stringify({ recoveryEmail }),
+  });
+  
+  console.log('   └─ Response status:', res.status);
+  
+  return handleResponse(res);
 }
+
+export async function verifyRecoveryEmailApi(otp) {
+  const res = await apiCall(`${API_BASE}/admin/recovery-email/verify`, {
+    method: "POST",
+    body: JSON.stringify({ otp }),
+  });
+  return handleResponse(res);
+}
+
+export async function getRecoveryEmailStatus() {
+  const res = await apiCall(`${API_BASE}/admin/recovery-email/status`);
+  return handleResponse(res);
+}
+
+// ============================================
+// ADMIN FORGOT PASSWORD (With Recovery Email)
+// ============================================
+
+export async function adminForgotPasswordSendOTP(loginEmail) {
+  const res = await fetch(`${API_BASE}/auth/admin/forgot-password/send-otp`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: loginEmail }),
+  });
+  return handleResponse(res);
+}
+
+export async function adminForgotPasswordVerifyOTP(loginEmail, otp) {
+  const res = await fetch(`${API_BASE}/auth/admin/forgot-password/verify-otp`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: loginEmail, otp }),
+  });
+  return handleResponse(res);
+}
+
+export async function adminForgotPasswordReset(resetToken, newPassword) {
+  const res = await fetch(`${API_BASE}/auth/admin/forgot-password/reset`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ resetToken, newPassword }),
+  });
+  return handleResponse(res);
+}
+
 // ============================================
 // REVEAL ANONYMOUS IDENTITY (Super Admin Only)
 // ============================================
@@ -482,9 +563,24 @@ export async function revealIdentity(complaintId) {
   return handleResponse(res);
 }
 
+// ============================================
+// ADMIN LOGS
+// ============================================
+
+export async function getAllLogs() {
+  const res = await apiCall(`${API_BASE}/admin/logs`);
+  return handleResponse(res);
+}
+
+export async function logout() {
+  logoutAdmin();
+}
+
+// ============================================
+// DEFAULT EXPORT
+// ============================================
 
 const api = {
-
   // Complaints
   getAllComplaints,
   getUnreadComplaints,
@@ -494,22 +590,22 @@ const api = {
   updateComplaint,
   markComplaintAsRead,
   getTrends,
-    revealIdentity, // ✅ ADD THIS LINE
-  
-  // Complaint Assignment - NEW
+  revealIdentity,
+
+  // Complaint Assignment
   assignComplaint,
   reassignComplaint,
   unassignComplaint,
   getStaffComplaints,
   getAssignmentStats,
-  
+
   // Departments
   getDepartments,
   getDepartmentById,
   createDepartment,
   updateDepartment,
   deleteDepartment,
-  
+
   // Staff
   getStaff,
   getStaffByDepartment,
@@ -517,22 +613,32 @@ const api = {
   createStaff,
   updateStaff,
   deleteStaff,
-  
+
   // Profile
   getProfile,
   updateProfile,
   changePassword,
-  
+
   // Students
   searchStudent,
   resetStudent,
 
-    getAllAdmins,
+  // Admin Management
+  getAllAdmins,
   createAdmin,
   updateAdmin,
   deleteAdmin,
   getAdminStats,
-  
+
+  // Admin Password & Recovery
+  resetAdminPassword,
+  setRecoveryEmailApi,
+  verifyRecoveryEmailApi,
+  getRecoveryEmailStatus,
+  adminForgotPasswordSendOTP,
+  adminForgotPasswordVerifyOTP,
+  adminForgotPasswordReset,
+
   // Logs
   getAllLogs,
   logout,

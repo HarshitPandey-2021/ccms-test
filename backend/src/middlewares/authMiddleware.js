@@ -7,8 +7,6 @@ function auth(req, res, next) {
     // Get Authorization header
     const authHeader = req.headers.authorization || req.headers.Authorization;
     
-    console.log("🔍 Auth middleware: checking token...");
-    
     if (!authHeader) {
       console.warn("❌ No Authorization header");
       return res.status(401).json({ message: "Authentication required" });
@@ -30,14 +28,16 @@ function auth(req, res, next) {
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
-    // Attach user info to request
+    // ✅ Attach user info to request - handle multiple ID field names
     req.user = {
-      userId: decoded.userId,
+      userId: decoded.userId || decoded.id || decoded._id,
+      id: decoded.userId || decoded.id || decoded._id,  // Alias for compatibility
+      _id: decoded.userId || decoded.id || decoded._id, // Alias for compatibility
       email: decoded.email,
       role: decoded.role,
     };
 
-    console.log("✅ Auth passed:", req.user.email, req.user.role);
+    console.log("✅ Auth passed:", req.user.email, "| Role:", req.user.role, "| ID:", req.user.userId);
     next();
   } catch (error) {
     console.error("❌ Auth error:", error.name, error.message);
@@ -56,19 +56,16 @@ function auth(req, res, next) {
 // Require specific role
 function requireRole(role) {
   return (req, res, next) => {
-    console.log("🔒 Role check: required", role, "actual", req.user?.role);
-    
     if (!req.user) {
       console.warn("❌ req.user not set");
       return res.status(401).json({ message: "Authentication required" });
     }
     
     if (req.user.role !== role) {
-      console.warn("❌ Role mismatch");
+      console.warn("❌ Role mismatch: required", role, "| actual", req.user.role);
       return res.status(403).json({ message: `Forbidden: ${role}s only` });
     }
     
-    console.log("✅ Role check passed");
     next();
   };
 }

@@ -265,7 +265,18 @@ export default function LoginPage() {
             </form>
 
             {/* Footer */}
-            <div className="mt-6 text-center">
+            <div className="mt-6 space-y-3 text-center">
+              {/* Forgot Password Link */}
+              <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>
+                <Link
+                  to="/forgot-password"
+                  className="font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 transition-colors"
+                >
+                  Forgot your password?
+                </Link>
+              </p>
+              
+              {/* Register Link */}
               <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>
                 New user?{" "}
                 <Link

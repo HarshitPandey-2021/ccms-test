@@ -1,9 +1,7 @@
-// src/pages/Profile.jsx - ADMIN PORTAL (final)
+// admin/src/pages/Profile.jsx - COMPLETE FIXED VERSION
 
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-// ✅ ADD THIS LINE
-const ADMIN_SESSION_KEY = "ccms-admin-session";
 import { useToast } from "../hooks/useToast";
 import {
   RiUserFill,
@@ -24,8 +22,14 @@ import {
   saveAdminSession,
 } from "../utils/tokenUtils";
 import { logActivity, ACTIVITY_TYPES } from "../services/activityLogger";
-import { getProfile, updateProfile, changePassword } from "../api";
-import ConfirmDialog from '../components/ConfirmDialog'; // ✅ Add this import if missing
+import { 
+  getProfile, 
+  updateProfile, 
+  changePassword, 
+  setRecoveryEmailApi, 
+  verifyRecoveryEmailApi 
+} from "../api";
+import ConfirmDialog from '../components/ConfirmDialog';
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -36,20 +40,30 @@ const Profile = () => {
     email: "Loading...",
     userId: "Loading...",
     role: "Loading...",
+    adminType: null,
+    department: null,
+    departmentName: null,
+    recoveryEmail: null,
+    recoveryEmailVerified: false,
     joinedDate: new Date(),
     lastLogin: new Date().toISOString(),
   });
-
+  
   const [isEditing, setIsEditing] = useState(false);
   const [editedData, setEditedData] = useState({ name: "", email: "" });
-const [showLogoutDialog, setShowLogoutDialog] = useState(false);
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const [showPasswordChange, setShowPasswordChange] = useState(false);
+  const [showRecoveryEmail, setShowRecoveryEmail] = useState(false);
+  const [recoveryEmail, setRecoveryEmail] = useState('');
+  const [recoveryEmailOtp, setRecoveryEmailOtp] = useState('');
+  const [recoveryEmailStep, setRecoveryEmailStep] = useState(1);
+  const [recoveryEmailLoading, setRecoveryEmailLoading] = useState(false);
+  const [currentRecoveryEmail, setCurrentRecoveryEmail] = useState('');
   const [passwords, setPasswords] = useState({
     current: "",
     new: "",
     confirm: "",
   });
-
   const [loading, setLoading] = useState(true);
 
   const [activities] = useState([
@@ -85,15 +99,14 @@ const [showLogoutDialog, setShowLogoutDialog] = useState(false);
           return;
         }
 
-        const backendProfile = await getProfile(token);
+        const backendProfile = await getProfile();
         console.log("Profile loaded from backend:", backendProfile);
 
         const userId =
-          (backendProfile._id &&
-            (backendProfile._id.toString
-              ? backendProfile._id.toString()
-              : String(backendProfile._id))) ||
-          backendProfile.userId ||
+          backendProfile._id?.toString?.() || 
+          backendProfile._id || 
+          backendProfile.userId || 
+          backendProfile.id ||
           "N/A";
 
         const uiProfile = {
@@ -101,9 +114,18 @@ const [showLogoutDialog, setShowLogoutDialog] = useState(false);
           email: backendProfile.email || "admin@campus.com",
           userId,
           role: backendProfile.role || "Administrator",
+          adminType: backendProfile.adminType || "super",
+          department: backendProfile.department || null,
+          departmentName: backendProfile.departmentName || null,
+          recoveryEmail: backendProfile.recoveryEmail || null,
+          recoveryEmailVerified: backendProfile.recoveryEmailVerified || false,
           joinedDate: backendProfile.createdAt || new Date(),
           lastLogin: new Date().toISOString(),
         };
+
+        if (backendProfile.recoveryEmail && backendProfile.recoveryEmailVerified) {
+          setCurrentRecoveryEmail(backendProfile.recoveryEmail);
+        }
 
         setProfileData(uiProfile);
         setEditedData({ name: uiProfile.name, email: uiProfile.email });
@@ -133,71 +155,65 @@ const [showLogoutDialog, setShowLogoutDialog] = useState(false);
     initProfile();
   }, [navigate, error]);
 
- const handleLogout = () => {
-  setShowLogoutDialog(true); // ✅ Show dialog instead of direct logout
-};
+  const handleLogout = () => {
+    setShowLogoutDialog(true);
+  };
 
-const handleConfirmLogout = () => {
-  logActivity(ACTIVITY_TYPES.LOGOUT, { page: "Profile" });
-  logoutAdmin();
-  success("Logged out successfully!");
-};
+  const handleConfirmLogout = () => {
+    logActivity(ACTIVITY_TYPES.LOGOUT, { page: "Profile" });
+    logoutAdmin();
+    success("Logged out successfully!");
+    navigate("/login");
+  };
 
-// admin/src/pages/Profile.jsx - UPDATE handleSaveProfile function (around line 170):
-const handleSaveProfile = async () => {
-  try {
-    const token = getAdminToken();
-    if (!token) {
-      error("Session expired. Please login again.");
-      navigate("/unauthorized");
-      return;
+  const handleSaveProfile = async () => {
+    try {
+      const token = getAdminToken();
+      if (!token) {
+        error("Session expired. Please login again.");
+        navigate("/unauthorized");
+        return;
+      }
+
+      const payload = { name: editedData.name };
+      await updateProfile(payload);
+
+      const updated = {
+        ...profileData,
+        name: editedData.name,
+        email: editedData.email,
+      };
+
+      setProfileData(updated);
+      setIsEditing(false);
+
+      const updatedSession = {
+        name: updated.name,
+        email: updated.email,
+        role: updated.role,
+        id: updated.userId,
+        adminType: profileData.adminType || "super",
+        department: profileData.department,
+        departmentName: profileData.departmentName,
+      };
+      
+      localStorage.setItem("ccms-admin-session", JSON.stringify(updatedSession));
+      localStorage.setItem("user", JSON.stringify(updatedSession));
+      localStorage.setItem("adminUser", JSON.stringify(updatedSession));
+
+      window.dispatchEvent(new Event('storage'));
+
+      logActivity(ACTIVITY_TYPES.PROFILE_UPDATE, {
+        action: "Updated profile details",
+        name: editedData.name,
+      });
+
+      success("Profile updated successfully!");
+    } catch (err) {
+      console.error("Profile update error:", err);
+      error(err.message || "Failed to update profile");
     }
-
-    const payload = {
-      name: editedData.name,
-    };
-
-    await updateProfile(payload, token);
-
-    const updated = {
-      ...profileData,
-      name: editedData.name,
-      email: editedData.email,
-    };
-
-    setProfileData(updated);
-    setIsEditing(false);
-
-    // ✅ FIXED: Build session from profileData (not undefined currentAdmin)
-    const updatedSession = {
-      name: updated.name,
-      email: updated.email,
-      role: updated.role || profileData.role,
-      id: updated.userId || profileData.userId,
-      adminType: profileData.adminType || "super", // ✅ Use profileData
-      department: profileData.department,
-      departmentName: profileData.departmentName,
-    };
-    
-    // Save to all storage keys
-    localStorage.setItem("ccms-admin-session", JSON.stringify(updatedSession));
-    localStorage.setItem("user", JSON.stringify(updatedSession));
-    localStorage.setItem("adminUser", JSON.stringify(updatedSession));
-
-    // Trigger storage event
-    window.dispatchEvent(new Event('storage'));
-
-    logActivity(ACTIVITY_TYPES.PROFILE_UPDATE, {
-      action: "Updated profile details",
-      name: editedData.name,
-    });
-
-    success("Profile updated successfully!");
-  } catch (err) {
-    console.error("Profile update error:", err);
-    error(err.message || "Failed to update profile");
-  }
-};
+  };
 
   const handleCancelEdit = () => {
     setEditedData({ name: profileData.name, email: profileData.email });
@@ -241,24 +257,63 @@ const handleSaveProfile = async () => {
     }
   };
 
+  const handleSetRecoveryEmail = async () => {
+    if (!recoveryEmail.trim()) {
+      error('Please enter a recovery email');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(recoveryEmail.trim())) {
+      error('Please enter a valid email address');
+      return;
+    }
+
+    try {
+      setRecoveryEmailLoading(true);
+      await setRecoveryEmailApi(recoveryEmail.trim());
+      success('Verification OTP sent to your recovery email!');
+      setRecoveryEmailStep(2);
+    } catch (err) {
+      console.error('Recovery email error:', err);
+      error(err.message || 'Failed to send verification OTP');
+    } finally {
+      setRecoveryEmailLoading(false);
+    }
+  };
+
+  const handleVerifyRecoveryEmail = async () => {
+    if (!recoveryEmailOtp.trim() || recoveryEmailOtp.length !== 6) {
+      error('Please enter the 6-digit OTP');
+      return;
+    }
+
+    try {
+      setRecoveryEmailLoading(true);
+      await verifyRecoveryEmailApi(recoveryEmailOtp.trim());
+      success('Recovery email verified successfully!');
+      setCurrentRecoveryEmail(recoveryEmail);
+      setShowRecoveryEmail(false);
+      setRecoveryEmailStep(1);
+      setRecoveryEmail('');
+      setRecoveryEmailOtp('');
+    } catch (err) {
+      error(err.message || 'Invalid OTP. Please try again.');
+    } finally {
+      setRecoveryEmailLoading(false);
+    }
+  };
+
   const getActivityIcon = (type) => {
     switch (type) {
       case "success":
-        return (
-          <RiCheckboxCircleLine className="h-5 w-5 text-green-600 dark:text-green-400" />
-        );
+        return <RiCheckboxCircleLine className="h-5 w-5 text-green-600 dark:text-green-400" />;
       case "warning":
-        return (
-          <RiEditLine className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
-        );
+        return <RiEditLine className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />;
       case "info":
-        return (
-          <RiCalendarLine className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-        );
+        return <RiCalendarLine className="h-5 w-5 text-blue-600 dark:text-blue-400" />;
       default:
-        return (
-          <RiUserFill className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-        );
+        return <RiUserFill className="h-5 w-5 text-gray-600 dark:text-gray-400" />;
     }
   };
 
@@ -330,45 +385,35 @@ const handleSaveProfile = async () => {
                   <RiUserFill className="h-4 w-4" />
                   User ID
                 </span>
-                <span className="font-mono font-semibold text-gray-900 dark:text-gray-100 truncate bg-gray-100 dark:bg-gray-900 px-2 py-1 rounded text-xs">
-                  {profileData.userId}
+                <span className="font-mono font-semibold text-gray-900 dark:text-gray-100 truncate bg-gray-100 dark:bg-gray-900 px-2 py-1 rounded text-xs max-w-[120px]">
+                  {profileData.userId?.slice?.(-8) || profileData.userId}
                 </span>
               </div>
               <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-600 dark:text-gray-400">Status</span>
-                <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                  Active
+                <span className="text-gray-600 dark:text-gray-400">Admin Type</span>
+                <span className="font-semibold text-indigo-600 dark:text-indigo-400 capitalize">
+                  {profileData.adminType || 'Super'}
                 </span>
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-600 dark:text-gray-400">
                   Last Login
                 </span>
-                <span className="font-semibold text-blue-600 dark:text-blue-400">
+                <span className="font-semibold text-blue-600 dark:text-blue-400 text-xs">
                   {formatDate(profileData.lastLogin)}
                 </span>
               </div>
             </div>
 
             <button
-  onClick={handleLogout} // ✅ Changed from direct logout
-  className="w-full mt-8 flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white font-semibold rounded-xl hover:from-red-600 hover:to-red-700 focus:ring-2 focus:ring-red-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition-all shadow-lg hover:shadow-xl"
->
-  <RiLogoutBoxRLine className="h-5 w-5" />
-  <span>Sign Out</span>
-</button>
+              onClick={handleLogout}
+              className="w-full mt-8 flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white font-semibold rounded-xl hover:from-red-600 hover:to-red-700 focus:ring-2 focus:ring-red-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition-all shadow-lg hover:shadow-xl"
+            >
+              <RiLogoutBoxRLine className="h-5 w-5" />
+              <span>Sign Out</span>
+            </button>
           </div>
         </div>
-        <ConfirmDialog
-                isOpen={showLogoutDialog}
-                onClose={() => setShowLogoutDialog(false)}
-                onConfirm={handleConfirmLogout}
-                title="Confirm Logout"
-                message="Are you sure you want to logout? You'll be redirected to the login page."
-                confirmText="Yes, Logout"
-                cancelText="Cancel"
-                type="danger"
-              />
 
         {/* Right Column - Details & Activity */}
         <div className="lg:col-span-2 space-y-6">
@@ -434,24 +479,14 @@ const handleSaveProfile = async () => {
                   <RiMailFill className="h-5 w-5 text-gray-500" />
                   Email Address
                 </label>
-                {isEditing ? (
-                  <input
-                    type="email"
-                    value={editedData.email}
-                    onChange={(e) =>
-                      setEditedData({ ...editedData, email: e.target.value })
-                    }
-                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-mono"
-                  />
-                ) : (
-                  <div className="font-mono text-lg text-gray-900 dark:text-white bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 px-6 py-4 rounded-xl border border-blue-200 dark:border-blue-800">
-                    {profileData.email}
-                  </div>
-                )}
+                <div className="font-mono text-lg text-gray-900 dark:text-white bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 px-6 py-4 rounded-xl border border-blue-200 dark:border-blue-800">
+                  {profileData.email}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Email cannot be changed</p>
               </div>
 
               <div className="sm:col-span-2">
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 flex itemscenter gap-2">
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
                   <RiShieldUserFill className="h-5 w-5 text-gray-500" />
                   Role & Permissions
                 </label>
@@ -461,7 +496,7 @@ const handleSaveProfile = async () => {
                     {profileData.role}
                   </span>
                   <span className="px-3 py-1 bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 text-xs font-semibold rounded-full">
-                    Full Access
+                    {profileData.adminType === 'super' ? 'Full Access' : 'Department Access'}
                   </span>
                 </div>
               </div>
@@ -472,9 +507,7 @@ const handleSaveProfile = async () => {
                   Account Created
                 </label>
                 <div className="px-6 py-4 bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-900/30 dark:to-indigo-900/30 rounded-xl border border-purple-200 dark:border-purple-800 font-mono text-sm">
-                  <span className="text-gray-700 dark:text-gray-300">
-                    Joined{" "}
-                  </span>
+                  <span className="text-gray-700 dark:text-gray-300">Joined </span>
                   <span className="font-semibold text-purple-800 dark:text-purple-200">
                     {formatDate(profileData.joinedDate)}
                   </span>
@@ -569,11 +602,161 @@ const handleSaveProfile = async () => {
               </div>
             ) : (
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                For security reasons, use a strong password and avoid sharing
-                your account with others.
+                For security reasons, use a strong password and avoid sharing your account with others.
               </p>
             )}
           </div>
+
+          {/* Recovery Email - Only for Super Admin */}
+          {profileData.adminType === 'super' && (
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-8">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
+                  <RiMailFill className="h-6 w-6 text-indigo-600" />
+                  Recovery Email
+                </h3>
+                <button
+                  onClick={() => setShowRecoveryEmail((prev) => !prev)}
+                  className="text-sm font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-300 dark:hover:text-indigo-200 flex items-center gap-1"
+                >
+                  {showRecoveryEmail ? (
+                    <>
+                      <RiCloseLine className="h-4 w-4" />
+                      <span>Close</span>
+                    </>
+                  ) : (
+                    <>
+                      <RiEditLine className="h-4 w-4" />
+                      <span>{currentRecoveryEmail ? 'Change' : 'Set'} Recovery Email</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {!showRecoveryEmail ? (
+                <div>
+                  {currentRecoveryEmail ? (
+                    <div className="flex items-center gap-3 p-4 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-200 dark:border-green-800">
+                      <RiCheckboxCircleLine className="h-6 w-6 text-green-600 dark:text-green-400" />
+                      <div>
+                        <p className="font-medium text-green-800 dark:text-green-200">
+                          Recovery email configured
+                        </p>
+                        <p className="text-sm text-green-600 dark:text-green-400">
+                          {currentRecoveryEmail.replace(/(.{3}).*(@.*)/, '$1***$2')}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-200 dark:border-amber-800">
+                      <RiLockPasswordLine className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+                      <div>
+                        <p className="font-medium text-amber-800 dark:text-amber-200">
+                          No recovery email set
+                        </p>
+                        <p className="text-sm text-amber-600 dark:text-amber-400">
+                          Set a real email to recover your password if you forget it.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {recoveryEmailStep === 1 ? (
+                    <>
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">
+                          Recovery Email Address
+                        </label>
+                        <input
+                          type="email"
+                          value={recoveryEmail}
+                          onChange={(e) => setRecoveryEmail(e.target.value)}
+                          placeholder="your.real.email@gmail.com"
+                          className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        />
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                          ⚠️ Use a REAL email you have access to. This will be used for password recovery.
+                        </p>
+                      </div>
+                      <div className="flex justify-end gap-3">
+                        <button
+                          onClick={() => {
+                            setShowRecoveryEmail(false);
+                            setRecoveryEmail('');
+                          }}
+                          className="px-4 py-2 text-sm font-semibold rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={handleSetRecoveryEmail}
+                          disabled={recoveryEmailLoading}
+                          className="px-4 py-2 text-sm font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm flex items-center gap-2 disabled:opacity-50"
+                        >
+                          {recoveryEmailLoading ? (
+                            <>
+                              <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                              <span>Sending OTP...</span>
+                            </>
+                          ) : (
+                            'Send Verification OTP'
+                          )}
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-4">
+                        <p className="text-sm text-blue-700 dark:text-blue-300">
+                          📧 OTP sent to <strong>{recoveryEmail}</strong>
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">
+                          Enter 6-digit OTP
+                        </label>
+                        <input
+                          type="text"
+                          value={recoveryEmailOtp}
+                          onChange={(e) => setRecoveryEmailOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                          placeholder="123456"
+                          maxLength={6}
+                          className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-center text-2xl tracking-widest font-mono"
+                        />
+                      </div>
+                      <div className="flex justify-end gap-3">
+                        <button
+                          onClick={() => {
+                            setRecoveryEmailStep(1);
+                            setRecoveryEmailOtp('');
+                          }}
+                          className="px-4 py-2 text-sm font-semibold rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+                        >
+                          Back
+                        </button>
+                        <button
+                          onClick={handleVerifyRecoveryEmail}
+                          disabled={recoveryEmailLoading}
+                          className="px-4 py-2 text-sm font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm flex items-center gap-2 disabled:opacity-50"
+                        >
+                          {recoveryEmailLoading ? (
+                            <>
+                              <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                              <span>Verifying...</span>
+                            </>
+                          ) : (
+                            'Verify & Save'
+                          )}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Recent Activity */}
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-8">
@@ -591,9 +774,7 @@ const handleSaveProfile = async () => {
                 >
                   <div className="mt-0.5">{getActivityIcon(act.type)}</div>
                   <div>
-                    <p className="text-gray-900 dark:text-gray-100">
-                      {act.action}
-                    </p>
+                    <p className="text-gray-900 dark:text-gray-100">{act.action}</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400">
                       {formatDate(act.date)}
                     </p>
@@ -605,17 +786,17 @@ const handleSaveProfile = async () => {
         </div>
       </div>
       
-{/* ✅ ADD THIS DIALOG AT THE VERY END (before closing </div>) */}
-<ConfirmDialog
-  isOpen={showLogoutDialog}
-  onClose={() => setShowLogoutDialog(false)}
-  onConfirm={handleConfirmLogout}
-  title="Confirm Logout"
-  message="Are you sure you want to logout? You'll be redirected to the login page."
-  confirmText="Yes, Logout"
-  cancelText="Cancel"
-  type="danger"
-/>
+      {/* Logout Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showLogoutDialog}
+        onClose={() => setShowLogoutDialog(false)}
+        onConfirm={handleConfirmLogout}
+        title="Confirm Logout"
+        message="Are you sure you want to logout? You'll be redirected to the login page."
+        confirmText="Yes, Logout"
+        cancelText="Cancel"
+        type="danger"
+      />
     </div>
   );
 };

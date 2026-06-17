@@ -16,6 +16,7 @@ import {
   RiEyeOffLine,
   RiAdminLine,
   RiUserStarLine,
+    RiKeyLine,  // ✅ ADD THIS
   RiTeamLine,
 } from 'react-icons/ri';
 import { useToast } from '../hooks/useToast';
@@ -36,6 +37,16 @@ const AdminManagement = () => {
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [stats, setStats] = useState(null);
+
+    // ✅ ADD THESE NEW STATES
+  const [showResetPasswordModal, setShowResetPasswordModal] = useState(false);
+  const [resettingAdmin, setResettingAdmin] = useState(null);
+  const [resetPasswordForm, setResetPasswordForm] = useState({
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [resettingPassword, setResettingPassword] = useState(false);
 
   const { success, error: showError } = useToast();
   const currentUser = getAdminUser();
@@ -267,6 +278,58 @@ const AdminManagement = () => {
     }
   };
 
+    // ✅ ADD THIS FUNCTION
+  // Reset password for another admin
+  const handleResetPasswordClick = (admin) => {
+    setResettingAdmin(admin);
+    setResetPasswordForm({ newPassword: '', confirmPassword: '' });
+    setShowResetPasswordModal(true);
+  };
+
+  const handleResetPasswordSubmit = async () => {
+    if (!resettingAdmin) return;
+
+    if (!resetPasswordForm.newPassword || !resetPasswordForm.confirmPassword) {
+      showError('Please fill in both password fields');
+      return;
+    }
+
+    if (resetPasswordForm.newPassword.length < 6) {
+      showError('Password must be at least 6 characters');
+      return;
+    }
+
+    if (resetPasswordForm.newPassword !== resetPasswordForm.confirmPassword) {
+      showError('Passwords do not match');
+      return;
+    }
+
+    try {
+      setResettingPassword(true);
+     // REPLACE WITH:
+console.log('🔑 Resetting password for:', resettingAdmin); // Debug
+const adminIdToReset = resettingAdmin._id || resettingAdmin.id;
+console.log('🆔 Admin ID:', adminIdToReset); // Debug
+
+if (!adminIdToReset) {
+  showError('Admin ID is missing');
+  setResettingPassword(false);
+  return;
+}
+
+await api.resetAdminPassword(adminIdToReset, resetPasswordForm.newPassword);
+      success(`Password reset successfully for ${resettingAdmin.name}`);
+      setShowResetPasswordModal(false);
+      setResettingAdmin(null);
+      setResetPasswordForm({ newPassword: '', confirmPassword: '' });
+    } catch (err) {
+      console.error('Error resetting password:', err);
+      showError(err.message || 'Failed to reset password');
+    } finally {
+      setResettingPassword(false);
+    }
+  };
+
   // Close modal
   const closeModal = () => {
     setShowModal(false);
@@ -478,8 +541,18 @@ const AdminManagement = () => {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
                         {new Date(admin.createdAt).toLocaleDateString()}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                                            <td className="px-6 py-4 whitespace-nowrap text-right">
                         <div className="flex items-center justify-end gap-2">
+                          {/* Reset Password Button */}
+                          {!isCurrentUser && (
+                            <button
+                              onClick={() => handleResetPasswordClick(admin)}
+                              className="p-2 rounded-lg text-gray-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors"
+                              title="Reset Password"
+                            >
+                              <RiKeyLine className="h-4 w-4" />
+                            </button>
+                          )}
                           <button
                             onClick={() => handleEdit(admin)}
                             className="p-2 rounded-lg text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
@@ -540,7 +613,18 @@ const AdminManagement = () => {
                       {getAdminTypeBadge(admin.adminType)}
                     </div>
                   </div>
+                  
+
                   <div className="flex gap-1">
+                    {!isCurrentUser && (
+                      <button
+                        onClick={() => handleResetPasswordClick(admin)}
+                        className="p-2 rounded-lg text-gray-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20"
+                        title="Reset Password"
+                      >
+                        <RiKeyLine className="h-4 w-4" />
+                      </button>
+                    )}
                     <button
                       onClick={() => handleEdit(admin)}
                       className="p-2 rounded-lg text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
@@ -556,6 +640,7 @@ const AdminManagement = () => {
                       </button>
                     )}
                   </div>
+
                 </div>
 
                 <div className="space-y-2 text-sm">
@@ -772,6 +857,144 @@ const AdminManagement = () => {
         cancelText="Cancel"
         type="danger"
       />
+
+            {/* Reset Password Modal */}
+      {showResetPasswordModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl w-full max-w-md shadow-2xl">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-5 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/30">
+                  <RiKeyLine className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                </div>
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                  Reset Password
+                </h2>
+              </div>
+              <button
+                onClick={() => {
+                  setShowResetPasswordModal(false);
+                  setResettingAdmin(null);
+                  setResetPasswordForm({ newPassword: '', confirmPassword: '' });
+                }}
+                className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              >
+                <RiCloseLine className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 space-y-4">
+              {/* Admin Info */}
+              <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
+                  Resetting password for:
+                </p>
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white font-semibold">
+                    {resettingAdmin?.name?.charAt(0).toUpperCase() || 'A'}
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-900 dark:text-white">
+                      {resettingAdmin?.name}
+                    </p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      {resettingAdmin?.email}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* New Password */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                  New Password <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <RiLockLine className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  <input
+                    type={showResetPassword ? "text" : "password"}
+                    value={resetPasswordForm.newPassword}
+                    onChange={(e) => setResetPasswordForm({ 
+                      ...resetPasswordForm, 
+                      newPassword: e.target.value 
+                    })}
+                    placeholder="Min. 6 characters"
+                    className="w-full pl-10 pr-10 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-colors"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowResetPassword(!showResetPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showResetPassword ? <RiEyeOffLine className="h-5 w-5" /> : <RiEyeLine className="h-5 w-5" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Confirm Password */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                  Confirm Password <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <RiLockLine className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  <input
+                    type={showResetPassword ? "text" : "password"}
+                    value={resetPasswordForm.confirmPassword}
+                    onChange={(e) => setResetPasswordForm({ 
+                      ...resetPasswordForm, 
+                      confirmPassword: e.target.value 
+                    })}
+                    placeholder="Re-enter password"
+                    className="w-full pl-10 pr-3 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-colors"
+                  />
+                </div>
+              </div>
+
+              {/* Warning */}
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
+                <p className="text-sm text-amber-700 dark:text-amber-300">
+                  ⚠️ The admin will need to use this new password to login. Make sure to communicate it securely.
+                </p>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex justify-end gap-3 p-5 border-t border-gray-200 dark:border-gray-700">
+              <button
+                onClick={() => {
+                  setShowResetPasswordModal(false);
+                  setResettingAdmin(null);
+                  setResetPasswordForm({ newPassword: '', confirmPassword: '' });
+                }}
+                disabled={resettingPassword}
+                className="px-4 py-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg font-medium transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleResetPasswordSubmit}
+                disabled={resettingPassword}
+                className="px-6 py-2.5 bg-amber-600 hover:bg-amber-700 disabled:bg-amber-400 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+              >
+                {resettingPassword ? (
+                  <>
+                    <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Resetting...</span>
+                  </>
+                ) : (
+                  <>
+                    <RiKeyLine className="h-4 w-4" />
+                    <span>Reset Password</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
