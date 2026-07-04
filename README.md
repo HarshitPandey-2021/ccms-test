@@ -1,6 +1,6 @@
 # 🎓 CCMS - Campus Complaint Management System
 
-> Report it. Track it. Fix it. 🚀
+> Report it. Track it. Fix it. 
 
 Modern web application for managing campus facility complaints with automated department routing, staff assignment, email notifications, and comprehensive analytics.
 
